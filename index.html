@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <meta name="theme-color" content="#060d1f" />
-<title>Stack Tower</title>
+<title>Stack to Orbit</title>
 <style>
   :root {
     --ink: #f8fafc;
@@ -2238,7 +2238,7 @@
           <button class="row" data-act="howto" id="sHowto">${ICON.help}<span class="lbl"><b>How to play</b></span>${ICON.chevR}</button>
           <button class="row danger" data-act="reset" id="sReset">${ICON.trash}<span class="lbl"><b>Reset progress</b><small>Stars, levels, skins and best scores</small></span></button>
         </div>
-        <p class="note">Stack Tower 1.0 · Works offline · Your progress stays on this device</p>
+        <p class="note">Stack to Orbit 1.0 · Works offline · Your progress stays on this device</p>
       </div>`;
     },
     stats() {
@@ -2364,8 +2364,8 @@
 
   async function share() {
     const text = mode === 'rising'
-      ? `I climbed ${lastScore} blocks above the lava in Stack Tower! Can you beat me?`
-      : `I stacked ${lastScore} blocks (${fmtAlt(altMeters(lastScore))}) in Stack Tower! Can you beat me?`;
+      ? `I climbed ${lastScore} blocks above the lava in Stack to Orbit! Can you beat me?`
+      : `I stacked ${lastScore} blocks (${fmtAlt(altMeters(lastScore))}) in Stack to Orbit! Can you beat me?`;
     try {
       if (navigator.share) await navigator.share({ text });
       else { await navigator.clipboard.writeText(text); toast('Score copied!', 'check'); }

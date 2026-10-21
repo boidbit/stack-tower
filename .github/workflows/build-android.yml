@@ -1,0 +1,83 @@
+name: Build Android (APK + AAB)
+
+on:
+  workflow_dispatch:
+    inputs:
+      formats:
+        description: What to build
+        type: choice
+        options: [both, apk, aab]
+        default: both
+      version_name:
+        description: Version name, e.g. 1.2.0 (blank = package.json version)
+        required: false
+        default: ""
+      version_code:
+        description: Version code, positive integer (blank = run number)
+        required: false
+        default: ""
+  push:
+    tags: ["v*"] # v1.2.0 builds version 1.2.0
+
+jobs:
+  apk:
+    if: github.event_name == 'push' || inputs.formats != 'aab'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: prepare
+        uses: ./.github/actions/prepare-android
+        with:
+          version-name: ${{ inputs.version_name }}
+          version-code: ${{ inputs.version_code }}
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Build APK
+        working-directory: android
+        run: |
+          if [ "${{ steps.prepare.outputs.signed }}" = "true" ]; then
+            ./gradlew assembleRelease
+          else
+            ./gradlew assembleDebug
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stack-to-orbit-${{ steps.prepare.outputs.version-name }}-apk
+          path: android/app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+
+  aab:
+    if: github.event_name == 'push' || inputs.formats != 'apk'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: prepare
+        uses: ./.github/actions/prepare-android
+        with:
+          version-name: ${{ inputs.version_name }}
+          version-code: ${{ inputs.version_code }}
+          keystore-base64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          keystore-password: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          key-alias: ${{ secrets.ANDROID_KEY_ALIAS }}
+          key-password: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Build AAB
+        working-directory: android
+        run: |
+          if [ "${{ steps.prepare.outputs.signed }}" = "true" ]; then
+            ./gradlew bundleRelease
+          else
+            ./gradlew bundleDebug
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stack-to-orbit-${{ steps.prepare.outputs.version-name }}-aab
+          path: android/app/build/outputs/bundle/**/*.aab
+          if-no-files-found: error

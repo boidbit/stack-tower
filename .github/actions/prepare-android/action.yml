@@ -1,0 +1,113 @@
+name: Prepare Android project
+description: Installs the toolchain, generates the Capacitor Android project, and sets version and signing.
+
+inputs:
+  keystore-base64:
+    description: Base64 of the release keystore (empty = no release signing)
+    required: false
+    default: ""
+  keystore-password:
+    required: false
+    default: ""
+  key-alias:
+    required: false
+    default: ""
+  key-password:
+    required: false
+    default: ""
+
+  version-name:
+    description: "Version name override, e.g. 1.2.0 (default: tag name without the leading v, else package.json version)"
+    required: false
+    default: ""
+  version-code:
+    description: "Version code override, a positive integer (default: workflow run number)"
+    required: false
+    default: ""
+
+outputs:
+  version-name:
+    description: Version name used for the build
+    value: ${{ steps.version.outputs.name }}
+  version-code:
+    description: Version code used for the build
+    value: ${{ steps.version.outputs.code }}
+  signed:
+    description: "true when release signing was configured"
+    value: ${{ steps.signing.outputs.signed }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: 21
+
+    - uses: android-actions/setup-android@v3
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Build web assets and generate Android project
+      shell: bash
+      run: |
+        npm run build:web
+        npx cap add android
+        npx cap sync android
+
+    - name: Decode keystore
+      id: signing
+      shell: bash
+      env:
+        KEYSTORE_B64: ${{ inputs.keystore-base64 }}
+        IN_KEYSTORE_PASSWORD: ${{ inputs.keystore-password }}
+        IN_KEY_ALIAS: ${{ inputs.key-alias }}
+        IN_KEY_PASSWORD: ${{ inputs.key-password }}
+      run: |
+        if [ -n "$KEYSTORE_B64" ]; then
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=$IN_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$IN_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$IN_KEY_PASSWORD" >> "$GITHUB_ENV"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "signed=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::No signing secrets found - building a debug-signed artifact (fine for testing, not for Play Store)."
+        fi
+
+    - name: Resolve version
+      id: version
+      shell: bash
+      env:
+        IN_NAME: ${{ inputs.version-name }}
+        IN_CODE: ${{ inputs.version-code }}
+        RUN_NUMBER: ${{ github.run_number }}
+      run: |
+        NAME="$IN_NAME"
+        if [ -z "$NAME" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then NAME="${GITHUB_REF_NAME#v}"; fi
+        if [ -z "$NAME" ]; then NAME=$(node -p "require('./package.json').version"); fi
+        CODE="${IN_CODE:-$RUN_NUMBER}"
+        if ! [[ "$NAME" =~ ^[0-9]+(.[0-9]+)*([-+][0-9A-Za-z.]+)?$ ]]; then
+          echo "::error::Invalid version name '$NAME' (expected e.g. 1.2.0 or 1.2.0-beta.1)"; exit 1
+        fi
+        if ! [[ "$CODE" =~ ^[1-9][0-9]{0,8}$ ]]; then
+          echo "::error::Invalid version code '$CODE' (expected a positive integer)"; exit 1
+        fi
+        echo "name=$NAME" >> "$GITHUB_OUTPUT"
+        echo "code=$CODE" >> "$GITHUB_OUTPUT"
+        echo "Building version $NAME (code $CODE)"
+
+    - name: Set version and signing in Gradle
+      shell: bash
+      env:
+        VERSION_NAME: ${{ steps.version.outputs.name }}
+        VERSION_CODE: ${{ steps.version.outputs.code }}
+      run: node scripts/patch-android.mjs
