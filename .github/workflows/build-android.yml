@@ -16,13 +16,23 @@ on:
         description: Version code, positive integer (blank = run number)
         required: false
         default: ""
+      create_release:
+        description: Attach the builds to a GitHub Release (tag v<version>)
+        type: boolean
+        default: true
   push:
     tags: ["v*"] # v1.2.0 builds version 1.2.0
+
+permissions:
+  contents: read
 
 jobs:
   apk:
     if: github.event_name == 'push' || inputs.formats != 'aab'
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.prepare.outputs.version-name }}
+      signed: ${{ steps.prepare.outputs.signed }}
     steps:
       - uses: actions/checkout@v4
 
@@ -54,6 +64,9 @@ jobs:
   aab:
     if: github.event_name == 'push' || inputs.formats != 'apk'
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.prepare.outputs.version-name }}
+      signed: ${{ steps.prepare.outputs.signed }}
     steps:
       - uses: actions/checkout@v4
 
@@ -81,3 +94,46 @@ jobs:
           name: stack-to-orbit-${{ steps.prepare.outputs.version-name }}-aab
           path: android/app/build/outputs/bundle/**/*.aab
           if-no-files-found: error
+
+  release:
+    needs: [apk, aab]
+    if: >-
+      always() && !cancelled() && !contains(needs.*.result, 'failure') &&
+      (needs.apk.result == 'success' || needs.aab.result == 'success') &&
+      (github.event_name == 'push' || inputs.create_release)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: stack-to-orbit-*
+          path: dist
+          merge-multiple: true
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.apk.outputs.version || needs.aab.outputs.version }}
+          SIGNED: ${{ needs.apk.outputs.signed || needs.aab.outputs.signed }}
+        run: |
+          TAG="v$VERSION"
+          mkdir release
+          APK=$(find dist -name '*.apk' | head -n 1)
+          AAB=$(find dist -name '*.aab' | head -n 1)
+          [ -n "$APK" ] && cp "$APK" "release/stack-to-orbit-$VERSION.apk"
+          [ -n "$AAB" ] && cp "$AAB" "release/stack-to-orbit-$VERSION.aab"
+          ls -l release
+
+          FLAGS=""
+          NOTES="Stack to Orbit $VERSION"
+          if [ "$SIGNED" != "true" ]; then
+            FLAGS="--prerelease"
+            NOTES="$NOTES (debug-signed test build - not for Google Play)"
+          fi
+
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" release/* --repo "$GITHUB_REPOSITORY"               --target "$GITHUB_SHA" --title "Stack to Orbit $VERSION" --notes "$NOTES" $FLAGS
+          fi
