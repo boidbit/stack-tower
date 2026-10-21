@@ -66,6 +66,7 @@ runs:
         npm run build:web
         npx cap add android
         npx cap sync android
+        npx capacitor-assets generate --android
 
     - name: Decode keystore
       id: signing
