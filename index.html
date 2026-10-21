@@ -1,0 +1,3164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<meta name="theme-color" content="#060d1f" />
+<title>Stack Tower</title>
+<style>
+  :root {
+    --ink: #f8fafc;
+    --muted: rgba(226, 232, 240, 0.74);
+    --dim: rgba(226, 232, 240, 0.5);
+    --panel: rgba(10, 18, 38, 0.74);
+    --panel-2: rgba(30, 41, 70, 0.78);
+    --line: rgba(255, 255, 255, 0.1);
+    --line-2: rgba(255, 255, 255, 0.18);
+    --accent: #facc15;
+    --accent-ink: #1c1300;
+    --accent-deep: #a16207;
+    --good: #34d399;
+    --danger: #f87171;
+    --radius: 20px;
+    --radius-s: 14px;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body {
+    height: 100%; overflow: hidden; background: #060d1f; color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-user-select: none; user-select: none; touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  svg { width: 1em; height: 1em; display: block; flex: none; }
+  .ic { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; top: 0; left: 0; right: 0; padding-top: calc(var(--safe-t) + 18px); text-align: center; pointer-events: none; transition: opacity .2s; }
+  #hud.hidden { opacity: 0; }
+  #score {
+    display: inline-block; font-size: 58px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums;
+    text-shadow: 0 2px 0 rgba(0,0,0,.25), 0 6px 18px rgba(0,0,0,.35);
+  }
+  #score.pop  { animation: pop .18s ease-out; }
+  #score.pop2 { animation: pop2 .26s ease-out; }
+  @keyframes pop  { 0% { transform: scale(1); } 40% { transform: scale(1.16); } 100% { transform: scale(1); } }
+  @keyframes pop2 { 0% { transform: scale(1); } 35% { transform: scale(1.3); }  100% { transform: scale(1); } }
+  #info { font-size: 15px; font-weight: 600; color: var(--muted); min-height: 18px; text-shadow: 0 1px 6px rgba(0,0,0,.4); }
+  #msg {
+    font-size: 20px; font-weight: 800; color: #fde047; height: 32px; margin-top: 6px;
+    opacity: 0; transition: opacity .25s; text-shadow: 0 2px 10px rgba(0,0,0,.35);
+  }
+  #msg.show { opacity: 1; }
+  #msg span { display: inline-block; }
+  #msg span.info { animation: msgIn .3s cubic-bezier(.2, 1.6, .4, 1); }
+  #msg span.combo { animation: comboIn 1s ease-out forwards; }
+  @keyframes comboIn {
+    0%   { transform: translateY(8px) scale(.5); opacity: 0; }
+    14%  { transform: translateY(0) scale(var(--peak, 1.1)); opacity: 1; }
+    28%  { transform: translateY(-2px) scale(1); opacity: 1; }
+    72%  { opacity: 1; }
+    100% { transform: translateY(-16px) scale(1); opacity: 0; }
+  }
+  @keyframes msgIn { from { transform: scale(.55) translateY(6px); opacity: 0; } to { transform: none; opacity: 1; } }
+  #zone {
+    position: fixed; left: 50%; top: calc(var(--safe-t) + 128px); transform: translate(-50%, -6px);
+    padding: 7px 14px; border-radius: 999px; background: rgba(8, 14, 32, 0.55); border: 1px solid var(--line);
+    backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: flex; align-items: baseline; gap: 8px; white-space: nowrap; pointer-events: none;
+    opacity: 0; transition: opacity .35s, transform .35s;
+  }
+  #zone.on { opacity: 1; transform: translate(-50%, 0); }
+  #zone b { font-size: 14px; }
+  #zone small { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #pauseBtn { position: fixed; top: calc(var(--safe-t) + 14px); right: 14px; display: none; }
+  #pauseBtn.show { display: flex; }
+
+  /* ---------- Buttons ---------- */
+  button { font: inherit; color: inherit; border: none; background: none; cursor: pointer; }
+  button:disabled { cursor: default; }
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+    min-height: 52px; padding: 12px 20px; border-radius: 16px; font-size: 17px; font-weight: 750;
+    background: var(--panel-2); border: 1px solid var(--line); box-shadow: 0 4px 0 rgba(0,0,0,.28);
+    transition: transform .08s, box-shadow .08s, background .15s;
+  }
+  .btn svg { font-size: 20px; }
+  .btn:active:not(:disabled) { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0,0,0,.28); }
+  .btn-primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; box-shadow: 0 5px 0 var(--accent-deep); }
+  .btn-primary:active:not(:disabled) { box-shadow: 0 2px 0 var(--accent-deep); }
+  .btn-xl { min-height: 64px; font-size: 20px; border-radius: 20px; }
+  .btn-xl svg { font-size: 26px; }
+  .btn .stack { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
+  .btn .stack small { font-size: 12.5px; font-weight: 650; opacity: .72; }
+  .btn-danger { color: #fecaca; }
+  .ib {
+    width: 46px; height: 46px; border-radius: 15px; display: flex; align-items: center; justify-content: center;
+    background: var(--panel-2); border: 1px solid var(--line); font-size: 21px; flex: none;
+    box-shadow: 0 3px 0 rgba(0,0,0,.25); transition: transform .08s;
+  }
+  .ib:active:not(:disabled) { transform: translateY(2px); }
+  .ib:disabled { opacity: .35; }
+  .ib.sm { width: 38px; height: 38px; border-radius: 12px; font-size: 18px; }
+  .ib.off { opacity: .45; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--line); font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums;
+  }
+  .chip svg { color: var(--accent); font-size: 16px; }
+  .chip i { font-style: normal; color: var(--dim); font-weight: 600; }
+
+  /* ---------- Screens ---------- */
+  .screen {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    padding: calc(var(--safe-t) + 14px) 16px calc(var(--safe-b) + 18px);
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+    opacity: 0; visibility: hidden; transform: translateY(10px); pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease, visibility 0s linear .18s;
+  }
+  .screen.on { opacity: 1; visibility: visible; transform: none; pointer-events: auto; transition-delay: 0s; }
+  .screen.dim { background: rgba(4, 9, 22, 0.66); backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); }
+  .wrap { width: 100%; max-width: 440px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+  .hdr { display: flex; align-items: center; gap: 12px; min-height: 48px; }
+  .hdr h2 { flex: 1; font-size: 22px; font-weight: 800; letter-spacing: .2px; }
+  .grow { flex: 1; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
+  .note { font-size: 13px; color: var(--dim); text-align: center; line-height: 1.45; padding: 4px 8px; }
+
+  /* Menu */
+  #scr-menu { background: linear-gradient(rgba(4,9,22,.55), rgba(4,9,22,0) 26%, rgba(4,9,22,0) 52%, rgba(4,9,22,.72)); }
+  .topbar { display: flex; align-items: center; gap: 10px; }
+  .logo { text-align: center; margin-top: 4vh; }
+  .logo-blocks { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-bottom: 12px; }
+  .logo-blocks i { display: block; height: 11px; border-radius: 3px; box-shadow: 0 3px 0 rgba(0,0,0,.25); }
+  .logo-blocks i:nth-child(1) { width: 44px; background: linear-gradient(#fde68a 0 35%, #facc15 35%); transform: translateX(6px); }
+  .logo-blocks i:nth-child(2) { width: 52px; background: linear-gradient(#c4b5fd 0 35%, #8b5cf6 35%); }
+  .logo-blocks i:nth-child(3) { width: 60px; background: linear-gradient(#7dd3fc 0 35%, #38bdf8 35%); }
+  .logo h1 { font-size: 46px; font-weight: 900; line-height: .95; letter-spacing: 2px; text-shadow: 0 4px 0 rgba(0,0,0,.25), 0 10px 30px rgba(0,0,0,.4); }
+  .logo h1 span { display: block; font-size: 22px; letter-spacing: 11px; margin-top: 6px; color: var(--accent); padding-left: 11px; }
+  .loc { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 14px; }
+  .loc-name { min-width: 150px; text-align: center; line-height: 1.15; }
+  .loc-name small { display: block; font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--dim); font-weight: 700; }
+  .loc-name b { font-size: 17px; }
+  .modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .mode {
+    display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 14px 6px 12px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 4px 0 rgba(0,0,0,.25);
+    transition: transform .08s;
+  }
+  .mode:active { transform: translateY(3px); }
+  .mode svg { font-size: 26px; color: var(--accent); margin-bottom: 2px; }
+  .mode b { font-size: 15px; }
+  .mode small { font-size: 11.5px; color: var(--dim); font-weight: 600; text-align: center; }
+  .mode.locked svg { color: var(--dim); }
+  .mode.locked b { color: var(--muted); }
+  .bottomrow { display: flex; gap: 10px; }
+  .pillbtn {
+    flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 14px;
+    background: var(--panel); border: 1px solid var(--line); font-size: 14.5px; font-weight: 700; position: relative;
+  }
+  .pillbtn svg { font-size: 19px; }
+  .dot { position: absolute; top: 8px; right: 10px; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(250,204,21,.25); }
+
+  /* Worlds */
+  .worlds { display: flex; flex-direction: column; gap: 12px; }
+  .world {
+    display: flex; align-items: center; gap: 14px; padding: 12px; text-align: left; width: 100%;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 4px 0 rgba(0,0,0,.25);
+    transition: transform .08s;
+  }
+  .world:active { transform: translateY(3px); }
+  .thumb { width: 86px; height: 64px; border-radius: 14px; overflow: hidden; flex: none; position: relative; background: linear-gradient(var(--a), var(--b)); }
+  .thumb svg { width: 100%; height: 100%; position: absolute; inset: 0; }
+  .world.locked .thumb { filter: grayscale(.85) brightness(.6); }
+  .wtxt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+  .wtxt b { font-size: 17px; }
+  .wtxt small { font-size: 12.5px; color: var(--dim); }
+  .bar { height: 6px; border-radius: 99px; background: rgba(255,255,255,.1); overflow: hidden; margin-top: 4px; }
+  .bar i { display: block; height: 100%; border-radius: 99px; background: var(--accent); }
+  .wmeta { display: flex; align-items: center; gap: 5px; font-size: 12.5px; font-weight: 700; color: var(--muted); margin-top: 2px; }
+  .wmeta svg { color: var(--accent); }
+  .world.locked .wmeta svg { color: var(--dim); }
+  .world > svg.ic { font-size: 22px; color: var(--dim); }
+
+  /* Levels */
+  .lvls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .lvl {
+    aspect-ratio: 1 / 1.05; border-radius: 18px; background: var(--panel); border: 1px solid var(--line);
+    box-shadow: 0 4px 0 rgba(0,0,0,.28); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+    transition: transform .08s;
+  }
+  .lvl:active:not(.locked) { transform: translateY(3px); }
+  .lvl .n { font-size: 28px; font-weight: 850; line-height: 1; }
+  .lvl .st { display: flex; gap: 2px; font-size: 14px; color: var(--accent); }
+  .lvl .st .e { color: rgba(255,255,255,.18); }
+  .lvl .tw { font-size: 11px; color: var(--dim); font-weight: 650; }
+  .lvl.locked { opacity: .55; }
+  .lvl.locked svg.ic { font-size: 26px; color: var(--dim); }
+  .lvl.next { border-color: rgba(250,204,21,.6); box-shadow: 0 4px 0 rgba(0,0,0,.28), 0 0 0 3px rgba(250,204,21,.14); }
+  .whead { display: flex; align-items: center; gap: 14px; padding: 12px; }
+
+  /* Skins */
+  .skins { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .skin {
+    display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 10px 12px; border-radius: 18px;
+    background: var(--panel); border: 1px solid var(--line); box-shadow: 0 4px 0 rgba(0,0,0,.25); text-align: center;
+  }
+  .skin canvas { width: 120px; height: 84px; }
+  .skin b { font-size: 15px; }
+  .skin small { font-size: 11.5px; color: var(--dim); font-weight: 600; display: flex; align-items: center; gap: 4px; line-height: 1.3; }
+  .skin.eq { border-color: rgba(250,204,21,.7); }
+  .skin.eq small { color: var(--accent); }
+  .skin.locked canvas { filter: grayscale(.9) brightness(.55); }
+
+  /* Settings */
+  .group { display: flex; flex-direction: column; overflow: hidden; }
+  .row { display: flex; align-items: center; gap: 14px; padding: 13px 14px; min-height: 64px; text-align: left; width: 100%; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > svg { font-size: 22px; color: var(--muted); }
+  .row .lbl { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+  .row .lbl b { font-size: 15.5px; }
+  .row .lbl small { font-size: 12.5px; color: var(--dim); }
+  .switch { width: 52px; height: 30px; border-radius: 99px; background: rgba(255,255,255,.16); position: relative; flex: none; transition: background .18s; }
+  .switch i { position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); transition: transform .18s; }
+  .switch[aria-checked="true"] { background: var(--good); }
+  .switch[aria-checked="true"] i { transform: translateX(22px); }
+  .switch:disabled { opacity: .4; }
+  .row.danger b, .row.danger > svg { color: var(--danger); }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat { padding: 14px; display: flex; flex-direction: column; gap: 4px; }
+  .stat small { font-size: 12px; color: var(--dim); font-weight: 650; text-transform: uppercase; letter-spacing: .8px; }
+  .stat b { font-size: 24px; font-weight: 850; font-variant-numeric: tabular-nums; }
+
+  /* How to play */
+  .steps { display: flex; flex-direction: column; gap: 12px; }
+  .step { display: flex; gap: 14px; align-items: center; padding: 14px; }
+  .step .num { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: flex; align-items: center; justify-content: center; font-weight: 850; flex: none; }
+  .step p { font-size: 14.5px; line-height: 1.45; color: var(--muted); }
+  .step p b { color: var(--ink); }
+  .demo { position: relative; height: 92px; margin: 4px auto 0; width: 220px; }
+  .d-base, .d-move { position: absolute; height: 18px; border-radius: 4px; }
+  .d-base { top: 46px; left: 50px; width: 120px; background: linear-gradient(#7dd3fc 0 30%, #38bdf8 30% 100%); }
+  .d-move { top: 28px; left: 0; width: 120px; background: linear-gradient(#fde68a 0 30%, #facc15 30% 100%); animation: slide 1.6s ease-in-out infinite alternate; }
+  @keyframes slide { from { left: 0; } to { left: 100px; } }
+  .d-tap { position: absolute; top: 4px; right: 18px; font-size: 26px; animation: tap 1.1s ease-in-out infinite; }
+  @keyframes tap { 0%, 100% { transform: scale(1); } 50% { transform: scale(.82); } }
+
+  /* Pause + result */
+  .center { margin: auto 0; display: flex; flex-direction: column; gap: 12px; align-items: stretch; }
+  .ttl { font-size: 34px; font-weight: 850; text-align: center; line-height: 1.1; }
+  .sub { font-size: 15px; color: var(--muted); text-align: center; }
+  .quick { display: flex; justify-content: center; gap: 12px; margin-top: 4px; }
+  .bigscore { font-size: 72px; font-weight: 900; text-align: center; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 6px 24px rgba(0,0,0,.4); }
+  .badge { align-self: center; padding: 5px 12px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 850; letter-spacing: .6px; }
+  .rstars { display: flex; justify-content: center; gap: 10px; font-size: 54px; color: rgba(255,255,255,.16); margin: 4px 0; }
+  .rstars .on { color: var(--accent); animation: starIn .45s cubic-bezier(.2, 1.7, .4, 1) both; filter: drop-shadow(0 0 14px rgba(250,204,21,.45)); }
+  .rstars .on:nth-child(2) { animation-delay: .18s; }
+  .rstars .on:nth-child(3) { animation-delay: .36s; }
+  @keyframes starIn { from { transform: scale(.2) rotate(-30deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  .notes { display: flex; flex-direction: column; gap: 8px; }
+  .notes div { padding: 10px 12px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); font-size: 14px; font-weight: 650; text-align: center; }
+  .notes div.hi { border-color: rgba(250,204,21,.55); color: #fef3c7; }
+  .rrow { display: flex; gap: 10px; }
+  .rrow .btn { flex: 1; }
+  .prog2 { height: 10px; border-radius: 99px; background: rgba(255,255,255,.12); overflow: hidden; margin: 4px 24px; }
+  .prog2 i { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
+
+  /* Modal */
+  .modal { align-items: center; justify-content: center; z-index: 30; }
+  .mcard { width: 100%; max-width: 360px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .mcard h3 { font-size: 20px; }
+  .mcard p { font-size: 14.5px; color: var(--muted); line-height: 1.45; }
+
+  /* Toasts */
+  #toasts { position: fixed; left: 0; right: 0; top: calc(var(--safe-t) + 74px); display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; z-index: 40; }
+  .toast {
+    max-width: calc(100% - 32px); padding: 10px 16px; border-radius: 14px; font-size: 14.5px; font-weight: 700;
+    background: rgba(15, 23, 42, 0.92); border: 1px solid var(--line-2); box-shadow: 0 10px 30px rgba(0,0,0,.4);
+    display: flex; align-items: center; gap: 8px; animation: toastIn .28s ease-out both;
+  }
+  .toast svg { color: var(--accent); font-size: 18px; }
+  .toast.out { animation: toastOut .25s ease-in both; }
+  @keyframes toastIn { from { transform: translateY(-12px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes toastOut { to { transform: translateY(-8px); opacity: 0; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .screen, .toast, .rstars .on { transition: none !important; animation: none !important; }
+  }
+  @media (max-height: 640px) {
+    .logo { margin-top: 1vh; }
+    .logo h1 { font-size: 38px; }
+    .logo-blocks { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud" class="hidden">
+  <div id="score">0</div>
+  <div id="info"></div>
+  <div id="msg"></div>
+</div>
+<div id="zone"></div>
+<button id="pauseBtn" class="ib" data-act="pause" aria-label="Pause"></button>
+
+<section id="scr-menu" class="screen" aria-label="Main menu"></section>
+<section id="scr-worlds" class="screen dim" aria-label="Worlds"></section>
+<section id="scr-levels" class="screen dim" aria-label="Levels"></section>
+<section id="scr-skins" class="screen dim" aria-label="Skins"></section>
+<section id="scr-settings" class="screen dim" aria-label="Settings"></section>
+<section id="scr-stats" class="screen dim" aria-label="Stats"></section>
+<section id="scr-howto" class="screen dim" aria-label="How to play"></section>
+<section id="scr-pause" class="screen dim" aria-label="Paused"></section>
+<section id="scr-result" class="screen dim" aria-label="Result"></section>
+<div id="modal" class="screen dim modal" role="dialog" aria-modal="true"></div>
+<div id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const canvas = $('c'), ctx = canvas.getContext('2d');
+  const hudEl = $('hud'), scoreEl = $('score'), infoEl = $('info'), msgEl = $('msg'), zoneEl = $('zone');
+  const pauseBtn = $('pauseBtn');
+
+  // ---------------------------------------------------------------
+  // Gameplay constants (unchanged from the original game)
+  // ---------------------------------------------------------------
+  const GW = 360, GH = 640;  // logical world size, scaled to fit the screen
+  const BH = 28;             // block height
+  const GROUND = 560;        // y of the base block's bottom edge
+  const PERFECT_TOL = 4;     // how close counts as a perfect drop
+  const GOLD_TOL = 6;        // gold blocks are a bit more forgiving, but must be perfect
+
+  // Visual-only: oblique 3D. The front face is exactly the gameplay rectangle (w x BH);
+  // top and right side faces recede by DX/DY and are never used for collision.
+  const DX = 9, DY = 7;
+  const GOLD_C = { h: 43, s: 96, l: 56, mat: 'gloss' };
+
+  // Levels: t = target height, base = starting width, speed, wobble = speed changes, gold = every Nth block must be perfect
+  const LEVELS = [
+    { t: 10, speed: 2.0 },
+    { t: 12, speed: 2.2 },
+    { t: 12, speed: 2.2, base: 150 },
+    { t: 15, speed: 2.5 },
+    { t: 15, speed: 3.3 },
+    { t: 15, speed: 2.6, base: 140 },
+    { t: 15, speed: 2.6, wobble: true },
+    { t: 18, speed: 3.0 },
+    { t: 15, speed: 2.6, gold: 5 },
+    { t: 18, speed: 3.3, base: 130 },
+    { t: 18, speed: 3.0, wobble: true },
+    { t: 20, speed: 3.0, gold: 4 },
+    { t: 20, speed: 3.2, base: 120 },
+    { t: 20, speed: 3.8 },
+    { t: 20, speed: 3.2, base: 140, wobble: true },
+    { t: 22, speed: 3.6, gold: 4 },
+    { t: 22, speed: 3.4, base: 110 },
+    { t: 24, speed: 3.8, wobble: true },
+    { t: 24, speed: 3.4, gold: 3 },
+    { t: 25, speed: 3.8, base: 120, wobble: true, gold: 4 },
+  ];
+  const DEFAULT_CFG = { t: 0, base: 200, speed: 2.2, wobble: false, gold: 0 };
+
+  // Rising mode: lava climbs from below. Heights are in block rows (0 = ground).
+  const RISE = {
+    unlockAfterLevel: 5,   // clear Level 5 to unlock
+    start: -2.5,           // lava starts two and a half rows below the ground
+    delay: 1.5,            // seconds before it starts moving
+    rate: 0.525,           // rows per second at the start (~1 block every 1.9 s)
+    accel: 0.006,          // extra rows/s gained per second played
+    maxRate: 1.0,          // cap: a careful player can still out-stack it, spam-tapping can't
+    perfectPush: 0.5,      // a Perfect pushes the lava down half a block
+    freeze: 120,           // frames the lava pauses on combo milestones (2 s)
+    loseGap: 0.25,         // game over once lava covers 75% of the top block
+    dangerRows: 3          // warning effects start when lava is within 3 rows of the top
+  };
+
+  function twistLabel(c) {
+    const parts = [];
+    if (c.base < 200) parts.push('Smaller base');
+    if (c.speed >= 3.3) parts.push('Faster');
+    if (c.wobble) parts.push('Speed changes');
+    if (c.gold) parts.push('Gold = perfect only');
+    return parts.join(' · ');
+  }
+  function twistShort(c) {
+    if (c.gold) return 'Gold';
+    if (c.wobble) return 'Wobble';
+    if (c.base < 200) return 'Small base';
+    if (c.speed >= 3.3) return 'Fast';
+    return 'Classic';
+  }
+
+  // ---------------------------------------------------------------
+  // Worlds, skins, zones
+  // ---------------------------------------------------------------
+  const LPW = 5;  // levels per world
+  const WORLDS = [
+    { id: 'city',   name: 'Night City',  sub: 'Where every tower begins',  need: 0,  skin: 'classic',   a: '#0b1a3a', b: '#2b4f86' },
+    { id: 'desert', name: 'Desert Dusk', sub: 'Sandstone under a low sun', need: 10, skin: 'sandstone', a: '#2a1440', b: '#d0706b' },
+    { id: 'snow',   name: 'Snow Peaks',  sub: 'Thin air and clear ice',    need: 22, skin: 'ice',       a: '#071731', b: '#3b7aa0' },
+    { id: 'neon',   name: 'Neon Harbor', sub: 'Lights on the water',       need: 35, skin: 'neon',      a: '#0b0118', b: '#5b1670' },
+  ];
+  const SKINS = [
+    { id: 'classic',   name: 'Classic',   mat: 'gloss', hue: 198, step: 11, sat: 72, lit: 60 },
+    { id: 'candy',     name: 'Candy',     mat: 'gloss', hue: 320, step: 20, sat: 80, lit: 67, req: { k: 'endless', v: 15, text: 'Reach 15 in Endless' } },
+    { id: 'sandstone', name: 'Sandstone', mat: 'sand',  hue: 14, range: 30, step: 3, sat: 56, lit: 60, req: { k: 'world', v: 1, text: 'Complete Desert Dusk' } },
+    { id: 'ice',       name: 'Glacier',   mat: 'ice',   hue: 186, range: 34, step: 3, sat: 72, lit: 72, req: { k: 'world', v: 2, text: 'Complete Snow Peaks' } },
+    { id: 'neon',      name: 'Neon',      mat: 'neon',  hue: 300, step: 57, sat: 100, lit: 62, req: { k: 'world', v: 3, text: 'Complete Neon Harbor' } },
+    { id: 'gold',      name: 'Gold Rush', mat: 'gloss', hue: 38, range: 12, step: 2, sat: 88, lit: 58, req: { k: 'perfects', v: 100, text: 'Land 100 Perfects' } },
+    { id: 'cosmic',    name: 'Cosmic',    mat: 'gloss', hue: 228, step: 9, sat: 62, lit: 60, req: { k: 'alt', v: 80, text: 'Reach space (height 80)' } },
+  ];
+  const SKIN_BY = Object.fromEntries(SKINS.map(s => [s.id, s]));
+  // Altitude zones for Endless and Rising (tower height in blocks)
+  const ZONES = [
+    { at: 0,  key: 'ground', icon: '📍' },
+    { at: 15, key: 'low',    icon: '🏙', name: null },             // name comes from the world
+    { at: 30, key: 'clouds', icon: '☁', name: 'Cloud layer' },
+    { at: 45, key: 'sky',    icon: '✈', name: 'Jet stream' },
+    { at: 60, key: 'strato', icon: '🌍', name: 'Stratosphere' },
+    { at: 80, key: 'space',  icon: '🚀', name: 'Outer space' },
+  ];
+  // Stylised altitude readout: blocks -> metres
+  const ALT_TABLE = [[0, 0], [15, 300], [30, 2000], [45, 9000], [60, 20000], [80, 100000], [120, 400000], [200, 2000000], [400, 384400000]];
+  function altMeters(h) {
+    for (let i = 1; i < ALT_TABLE.length; i++) {
+      const [a, ma] = ALT_TABLE[i - 1], [b, mb] = ALT_TABLE[i];
+      if (h <= b) return ma + (mb - ma) * (h - a) / (b - a);
+    }
+    return ALT_TABLE[ALT_TABLE.length - 1][1];
+  }
+  function fmtAlt(m) {
+    if (m < 1000) return `${Math.round(m)} m`;
+    if (m < 100000) return `${(m / 1000).toFixed(1)} km`;
+    return `${Math.round(m / 1000).toLocaleString('en-US')} km`;
+  }
+  const zoneAt = h => { let z = 0; for (let i = 0; i < ZONES.length; i++) if (h >= ZONES[i].at) z = i; return z; };
+
+  // Kept with the same field names as the city version (also used by the environment)
+  const CITY = {
+    skyFrom: 22, skyTo: 45,       // ground sky -> high sky
+    hazeFrom: 12, hazeTo: 30,     // haze thickens below as the ground drops away
+    cloudFrom: 23, cloudTo: 35,   // background clouds fade in, mostly there by the cloud layer (30)
+    meterMax: 90,
+    milestoneEvery: 10
+  };
+
+  // ---------------------------------------------------------------
+  // Saved data (one record, migrated from the older separate keys)
+  // ---------------------------------------------------------------
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+  const SAVE_KEY = 'stackTowerSave2';
+  const prefersReduced = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const canVibrate = typeof navigator.vibrate === 'function';
+
+  function defaultSave() {
+    return {
+      v: 2,
+      prog: { unlocked: 1, stars: [] },
+      best: 0, bestRising: 0,
+      skins: ['classic'], skin: 'classic', world: 'city',
+      seenHowTo: false, seenSkins: 1,
+      stats: { games: 0, blocks: 0, perfects: 0, bestCombo: 0, maxAlt: 0 },
+      settings: { sound: true, vibe: true, reducedFx: prefersReduced, meter: true }
+    };
+  }
+  function normalizeSave(s) {
+    const d = defaultSave();
+    const out = Object.assign(d, s || {});
+    out.prog = Object.assign({ unlocked: 1, stars: [] }, out.prog || {});
+    if (typeof out.prog.unlocked !== 'number' || !Array.isArray(out.prog.stars)) out.prog = { unlocked: 1, stars: [] };
+    out.prog.unlocked = Math.max(1, Math.min(LEVELS.length, out.prog.unlocked | 0));
+    out.prog.stars = out.prog.stars.slice(0, LEVELS.length).map(v => Math.max(0, Math.min(3, v | 0)));
+    out.stats = Object.assign(defaultSave().stats, out.stats || {});
+    out.settings = Object.assign(defaultSave().settings, out.settings || {});
+    if (!Array.isArray(out.skins)) out.skins = ['classic'];
+    out.skins = out.skins.filter(id => SKIN_BY[id]);
+    if (!out.skins.includes('classic')) out.skins.unshift('classic');
+    if (!out.skins.includes(out.skin)) out.skin = 'classic';
+    if (!WORLDS.some(w => w.id === out.world)) out.world = 'city';
+    out.best = out.best | 0;
+    out.bestRising = out.bestRising | 0;
+    return out;
+  }
+  function loadSave() {
+    const s = store.get(SAVE_KEY, null);
+    if (s && s.v === 2) return normalizeSave(s);
+    // First run of this version: carry over progress and settings from the older keys
+    const m = defaultSave();
+    const p = store.get('stackTowerProgress', null);
+    const hadOld = p !== null || store.get('stackTowerBest', null) !== null;
+    if (p && typeof p.unlocked === 'number' && Array.isArray(p.stars)) m.prog = { unlocked: p.unlocked, stars: p.stars };
+    m.best = store.get('stackTowerBest', 0);
+    m.bestRising = store.get('stackTowerBestRising', 0);
+    const oldMuted = store.get('stackTowerMuted', null);
+    m.settings.sound = store.get('stackTowerSoundOn', oldMuted === null ? true : !oldMuted);
+    m.settings.vibe = store.get('stackTowerVibeOn', oldMuted === null ? true : !oldMuted);
+    m.settings.reducedFx = store.get('stackTowerReducedFx', prefersReduced);
+    const th = store.get('stackTowerUnlocked', []);
+    if (Array.isArray(th) && th.includes('candy')) m.skins.push('candy');
+    m.seenHowTo = hadOld;                                   // returning players skip the intro
+    return normalizeSave(m);
+  }
+  let save = loadSave();
+  function persist() { store.set(SAVE_KEY, save); }
+
+  // Live aliases used by the gameplay code
+  let prog = save.prog;
+  let best = save.best, bestRising = save.bestRising;
+  let soundOn = save.settings.sound, vibeOn = save.settings.vibe, fxLow = save.settings.reducedFx;
+
+  const totalStars = () => prog.stars.reduce((a, b) => a + (b || 0), 0);
+  const worldOf = i => Math.floor(i / LPW);
+  const worldIdx = id => Math.max(0, WORLDS.findIndex(w => w.id === id));
+  const worldStars = w => { let s = 0; for (let i = w * LPW; i < w * LPW + LPW; i++) s += prog.stars[i] || 0; return s; };
+  const worldDone = w => (prog.stars[w * LPW + LPW - 1] || 0) > 0;
+  const worldReached = w => w === 0 || prog.unlocked > w * LPW;
+  const worldOpen = w => w === 0 || (worldReached(w) && totalStars() >= WORLDS[w].need);
+  const levelOpen = i => i < prog.unlocked && worldOpen(worldOf(i));
+  const risingUnlocked = () => prog.unlocked > RISE.unlockAfterLevel;
+  function worldLockText(w) {
+    if (!worldReached(w)) return `Clear Level ${w * LPW} first`;
+    return `Need ${WORLDS[w].need} ★ · you have ${totalStars()}`;
+  }
+
+  function skinReqProgress(s) {
+    const r = s.req;
+    if (!r) return { cur: 1, max: 1 };
+    if (r.k === 'endless') return { cur: Math.min(save.best, r.v), max: r.v };
+    if (r.k === 'world') return { cur: worldDone(r.v) ? 1 : 0, max: 1 };
+    if (r.k === 'perfects') return { cur: Math.min(save.stats.perfects, r.v), max: r.v };
+    if (r.k === 'alt') return { cur: Math.min(save.stats.maxAlt, r.v), max: r.v };
+    return { cur: 0, max: 1 };
+  }
+  // Unlock any skin whose requirement is now met; returns the newly unlocked skins
+  function checkSkins() {
+    const fresh = [];
+    for (const s of SKINS) {
+      if (save.skins.includes(s.id)) continue;
+      const p = skinReqProgress(s);
+      if (p.cur >= p.max) { save.skins.push(s.id); fresh.push(s); }
+    }
+    return fresh;
+  }
+
+  // ---------------------------------------------------------------
+  // Block colours and materials
+  // ---------------------------------------------------------------
+  let skinNow = 'classic';  // skin used by the blocks right now
+  const activeSkin = () => SKIN_BY[skinNow] || SKINS[0];
+  function colorForSkin(s, i) {
+    let h;
+    if (s.range) {
+      const t = (i * s.step) % (2 * s.range);
+      h = s.hue + (t < s.range ? t : 2 * s.range - t);
+    } else {
+      h = (s.hue + i * s.step) % 360;
+    }
+    const l = s.mat === 'sand' ? s.lit + ((i % 3) - 1) * 3 : s.lit;
+    return { h, s: s.sat, l, mat: s.mat };
+  }
+  const colorFor = i => colorForSkin(activeSkin(), i);
+  const clampL = v => Math.max(0, Math.min(100, v));
+  const hsl = (c, dl = 0, a = 1) => `hsla(${c.h},${c.s}%,${clampL(c.l + dl)}%,${a})`;
+  // Material for one block, built once when the block is created (never per frame).
+  // Key light from the top-left: top face brightest, front mid, right side darkest.
+  // Gradients are in the block's local space, so they are reused at any position or squash.
+  function shades(c) {
+    const mat = c.mat || 'gloss';
+    const lg = (stops, y0 = 0, y1 = BH) => {
+      const g = ctx.createLinearGradient(0, y0, 0, y1);
+      stops.forEach(([o, col]) => g.addColorStop(o, col));
+      return g;
+    };
+    const sh = { mat, spark: hsl(c, 22), bright: hsl(c, 32), shadowSoft: hsl(c, -32, 0.32), shadowHard: hsl(c, -36, 0.38) };
+    if (mat === 'sand') {
+      sh.front = lg([[0, hsl(c, 4)], [0.5, hsl(c, 0)], [1, hsl(c, -8)]]);
+      sh.top = lg([[0, hsl(c, 15)], [1, hsl(c, 10)]], 0, -DY);
+      sh.side = lg([[0, hsl(c, -14)], [1, hsl(c, -22)]]);
+      sh.edge = hsl(c, 22, 0.65);
+      sh.strata = hsl(c, -13, 0.55);
+      sh.strata2 = hsl(c, 9, 0.35);
+    } else if (mat === 'ice') {
+      sh.front = lg([[0, hsl(c, 8, 0.9)], [0.5, hsl(c, 0, 0.86)], [1, hsl(c, -10, 0.92)]]);
+      sh.top = lg([[0, hsl(c, 24, 0.97)], [1, hsl(c, 16, 0.95)]], 0, -DY);
+      sh.side = lg([[0, hsl(c, -8, 0.88)], [1, hsl(c, -18, 0.92)]]);
+      sh.edge = 'rgba(255,255,255,0.95)';
+      sh.glint = 'rgba(255,255,255,0.2)';
+      sh.frost = 'rgba(255,255,255,0.38)';
+    } else if (mat === 'neon') {
+      const dark = { h: c.h, s: 45, l: 11 };
+      sh.front = lg([[0, hsl(dark, 4)], [1, hsl(dark, -3)]]);
+      sh.top = lg([[0, hsl(dark, 11)], [1, hsl(dark, 7)]], 0, -DY);
+      sh.side = lg([[0, hsl(dark, -2)], [1, hsl(dark, -5)]]);
+      sh.edge = hsl(c, 6);
+      sh.glowLine = hsl(c, 0, 0.32);
+      sh.inner = hsl(c, 12, 0.22);
+      sh.shadowSoft = 'rgba(0,0,0,0.32)';
+      sh.shadowHard = 'rgba(0,0,0,0.42)';
+      sh.spark = hsl(c, 14);
+      sh.bright = hsl(c, 24);
+    } else {
+      sh.front = lg([[0, hsl(c, 9)], [0.45, hsl(c, 1)], [1, hsl(c, -9)]]);
+      sh.top = lg([[0, hsl(c, 24)], [1, hsl(c, 14)]], 0, -DY);
+      sh.side = lg([[0, hsl(c, -11)], [1, hsl(c, -24)]]);
+      sh.edge = hsl(c, 34, 0.9);
+    }
+    return sh;
+  }
+
+  // ---------------------------------------------------------------
+  // Environments (one per world)
+  // ---------------------------------------------------------------
+  // Layer sizes are in world units (one block = 28) so scenery matches the tower on every screen.
+  // f = share of the camera's movement (parallax). lift = how far the layer's base sits above the ground.
+  const ENVS = {
+    city: {
+      sky: { top: '#060d1f', bottom: '#1b375f', glow: 'rgba(110,160,255,0.20)', haze: 'rgba(150,195,255,0.07)' },
+      lowName: 'Above the rooftops',
+      ground: { top: null, edge: 'rgba(255,255,255,0.07)' },
+      ambient: 'dust', ink: [214, 222, 255], low: ['birds', 'heli'],
+      layers: [
+        { shape: 'tower', f: 0.55, lift: 45, hMin: 160, hMax: 340, wMin: 22, wMax: 50, gap: 2, tone: 0.85, fog: 0.45, baseFog: 0.7,  win: 0.12, winA: 0.45, wsz: 1.7, clear: 0 },
+        { shape: 'tower', f: 0.75, lift: 25, hMin: 190, hMax: 420, wMin: 32, wMax: 70, gap: 4, tone: 0.55, fog: 0.22, baseFog: 0.55, win: 0.20, winA: 0.55, wsz: 2.4, clear: 0.7 },
+        { shape: 'tower', f: 1.0,  lift: 0,  hMin: 140, hMax: 370, wMin: 42, wMax: 88, gap: 6, tone: 0.22, fog: 0.06, baseFog: 0.45, win: 0.26, winA: 0.6,  wsz: 3.2, clear: 0.45 },
+      ]
+    },
+    desert: {
+      sky: { top: '#1a1033', bottom: '#b35a6a', glow: 'rgba(255,170,120,0.22)', haze: 'rgba(255,190,150,0.10)' },
+      sun: { x: 0.72, y: 0.6, r: 0.065 },
+      lowName: 'Above the dunes',
+      ground: { top: [196, 132, 92], bottom: [92, 52, 44], edge: 'rgba(255,226,190,0.28)' },
+      ambient: 'sand', ink: [255, 232, 214], low: ['birds', 'balloon'],
+      layers: [
+        { shape: 'mesa', f: 0.55, lift: 45, hMin: 90,  hMax: 230, wMin: 60, wMax: 150, gap: 40, tone: 0.78, fog: 0.4, baseFog: 0.7, pyr: 0.35, clear: 0 },
+        { shape: 'dune', f: 0.75, lift: 25, hMin: 60,  hMax: 160, wave: [150, 70, 33], tone: 0.55, fog: 0.2, baseFog: 0.55, clear: 0.6 },
+        { shape: 'dune', f: 1.0,  lift: 0,  hMin: 26,  hMax: 92,  wave: [110, 52, 24], tone: 0.3,  fog: 0.05, baseFog: 0.4, clear: 0.5 },
+      ]
+    },
+    snow: {
+      sky: { top: '#061226', bottom: '#2a5878', glow: 'rgba(140,220,255,0.18)', haze: 'rgba(200,230,255,0.10)' },
+      aurora: true,
+      lowName: 'Above the treeline',
+      ground: { top: [222, 234, 247], bottom: [128, 158, 190], edge: 'rgba(255,255,255,0.65)' },
+      ambient: 'snow', ink: [236, 244, 255], low: ['birds', 'balloon'],
+      layers: [
+        { shape: 'peak', f: 0.5,  lift: 45, hMin: 160, hMax: 330, wMin: 50, wMax: 120, tone: 0.75, fog: 0.42, baseFog: 0.7, clear: 0.7, cap: 0.5 },
+        { shape: 'peak', f: 0.72, lift: 25, hMin: 110, hMax: 230, wMin: 40, wMax: 95,  tone: 0.45, fog: 0.2,  baseFog: 0.55, clear: 0.55, cap: 0.72 },
+        { shape: 'pine', f: 1.0,  lift: 0,  hMin: 34,  hMax: 86,  wMin: 14, wMax: 26,  tone: 0.18, fog: 0.04, baseFog: 0.4, clear: 0.9 },
+      ]
+    },
+    neon: {
+      sky: { top: '#08010f', bottom: '#36104a', glow: 'rgba(236,72,153,0.22)', haze: 'rgba(190,120,255,0.10)' },
+      lowName: 'Above the harbor lights',
+      ground: { water: true, top: [26, 10, 46], bottom: [6, 2, 14], edge: 'rgba(236,72,153,0.55)' },
+      ambient: 'bokeh', ink: [250, 220, 255], low: ['heli', 'birds'],
+      layers: [
+        { shape: 'tower', neon: true, f: 0.55, lift: 45, hMin: 150, hMax: 330, wMin: 22, wMax: 50, gap: 2, tone: 0.75, fog: 0.4, baseFog: 0.7,  win: 0.14, winA: 0.5,  wsz: 1.7, clear: 0 },
+        { shape: 'tower', neon: true, f: 0.75, lift: 25, hMin: 180, hMax: 400, wMin: 32, wMax: 70, gap: 4, tone: 0.45, fog: 0.2,  baseFog: 0.55, win: 0.2,  winA: 0.6,  wsz: 2.4, clear: 0.7 },
+        { shape: 'tower', neon: true, f: 1.0,  lift: 0,  hMin: 130, hMax: 350, wMin: 42, wMax: 88, gap: 6, tone: 0.15, fog: 0.05, baseFog: 0.45, win: 0.24, winA: 0.65, wsz: 3.2, clear: 0.45 },
+      ]
+    }
+  };
+
+  const smooth = (a, b, v) => { const t = Math.max(0, Math.min(1, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const hexRgb = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const mixRgb = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  const rgba = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+  const seeded = seed => { let v = seed; return () => (v = (v * 16807) % 2147483647) / 2147483647; };
+
+  let scale = 1, ox = 0, oy = 0;
+  let envId = 'city';
+  const bgCanvas = document.createElement('canvas');      // ground-level sky of the current world
+  const bgCtx = bgCanvas.getContext('2d');
+  const dangerCanvas = document.createElement('canvas');
+  const dangerCtx = dangerCanvas.getContext('2d');
+  const cityLayers = [];        // scenery layers of the current world: { c, lh, f, lift, fill, blds }
+  const twinkles = [];          // a handful of windows / signs that slowly brighten and dim
+  const hazeCanvas = document.createElement('canvas');
+  const sceneCanvas = document.createElement('canvas');
+  const sceneCtx = sceneCanvas.getContext('2d');
+  const skyStage = [bgCanvas, document.createElement('canvas'), document.createElement('canvas'), document.createElement('canvas')];
+  const skyBuilt = [true, false, false, false];
+  const cloudSprites = [];
+  const fgSprites = [];
+  const clouds = [];
+  const fgClouds = [];
+  const spr = {};               // fly-by sprites
+  let floorGrad = null;
+  let sceneKey = '', lastSceneKey = '', sceneValid = false;
+
+  function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);   // capped for low-end phones
+    canvas.width = Math.round(innerWidth * dpr);
+    canvas.height = Math.round(innerHeight * dpr);
+    // Fit the full 3D width (front faces + receding side faces) so nothing is cut off on narrow phones
+    scale = Math.min(canvas.width / (GW + DX), canvas.height / GH);
+    ox = (canvas.width - (GW + DX) * scale) / 2;
+    oy = (canvas.height - GH * scale) / 2;
+    buildBackground();
+  }
+
+  function setEnv(id) {
+    if (!ENVS[id]) id = 'city';
+    if (id === envId && bgCanvas.width === canvas.width && bgCanvas.height === canvas.height) return;
+    envId = id;
+    buildBackground();
+  }
+
+  // Ground-level sky, danger vignette, scenery and sprites: drawn once, then only copied each frame
+  function buildBackground() {
+    const E = ENVS[envId];
+    const t = E.sky;
+    const W = bgCanvas.width = canvas.width;
+    const H = bgCanvas.height = canvas.height;
+    const g = bgCtx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, t.top);
+    g.addColorStop(1, t.bottom);
+    bgCtx.fillStyle = g;
+    bgCtx.fillRect(0, 0, W, H);
+    const r = bgCtx.createRadialGradient(W / 2, H * 0.1, 0, W / 2, H * 0.1, Math.max(W, H) * 0.7);
+    r.addColorStop(0, t.glow);
+    r.addColorStop(1, 'rgba(0,0,0,0)');
+    bgCtx.fillStyle = r;
+    bgCtx.fillRect(0, 0, W, H);
+    if (E.sun) {                                           // low sun behind the far scenery
+      const sx = W * E.sun.x, sy = oy + GH * scale * E.sun.y, sr = H * E.sun.r;
+      const sg = bgCtx.createRadialGradient(sx, sy, 0, sx, sy, sr * 6);
+      sg.addColorStop(0, 'rgba(255,200,140,0.55)');
+      sg.addColorStop(0.3, 'rgba(255,150,110,0.18)');
+      sg.addColorStop(1, 'rgba(255,120,100,0)');
+      bgCtx.fillStyle = sg;
+      bgCtx.fillRect(0, 0, W, H);
+      bgCtx.fillStyle = 'rgba(255,214,160,0.95)';
+      bgCtx.beginPath();
+      bgCtx.arc(sx, sy, sr, 0, Math.PI * 2);
+      bgCtx.fill();
+    }
+    if (E.aurora) {                                        // soft aurora bands
+      try { bgCtx.filter = `blur(${Math.round(H * 0.012)}px)`; } catch (e) {}
+      [[0.16, 'rgba(110,255,190,0.20)', 1.0], [0.24, 'rgba(90,200,255,0.14)', 1.6]].forEach(([yy, col, k], j) => {
+        bgCtx.beginPath();
+        const steps = 24;
+        for (let i = 0; i <= steps; i++) {
+          const x = W * i / steps;
+          const y = H * yy + Math.sin(i * 0.55 * k + j) * H * 0.03;
+          if (i === 0) bgCtx.moveTo(x, y); else bgCtx.lineTo(x, y);
+        }
+        for (let i = steps; i >= 0; i--) {
+          const x = W * i / steps;
+          bgCtx.lineTo(x, H * yy + Math.sin(i * 0.55 * k + j) * H * 0.03 + H * 0.07);
+        }
+        bgCtx.closePath();
+        bgCtx.fillStyle = col;
+        bgCtx.fill();
+      });
+      try { bgCtx.filter = 'none'; } catch (e) {}
+    }
+    if (envId === 'neon') {                                // magenta city glow at the horizon
+      const ng = bgCtx.createRadialGradient(W / 2, H * 0.95, 0, W / 2, H * 0.95, Math.max(W, H) * 0.6);
+      ng.addColorStop(0, 'rgba(236,72,153,0.28)');
+      ng.addColorStop(1, 'rgba(236,72,153,0)');
+      bgCtx.fillStyle = ng;
+      bgCtx.fillRect(0, 0, W, H);
+    }
+    const hz = bgCtx.createLinearGradient(0, H * 0.68, 0, H);
+    hz.addColorStop(0, 'rgba(0,0,0,0)');
+    hz.addColorStop(1, t.haze);
+    bgCtx.fillStyle = hz;
+    bgCtx.fillRect(0, H * 0.68, W, H * 0.32);
+    const v = bgCtx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.78);
+    v.addColorStop(0, 'rgba(0,0,0,0)');
+    v.addColorStop(1, 'rgba(0,0,0,0.32)');
+    bgCtx.fillStyle = v;
+    bgCtx.fillRect(0, 0, W, H);
+    // Danger vignette for Rising mode (drawn with varying alpha, never rebuilt per frame)
+    dangerCanvas.width = W;
+    dangerCanvas.height = H;
+    const dv = dangerCtx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.max(W, H) * 0.72);
+    dv.addColorStop(0, 'rgba(220,38,38,0)');
+    dv.addColorStop(1, 'rgba(220,38,38,0.85)');
+    dangerCtx.fillStyle = dv;
+    dangerCtx.fillRect(0, 0, W, H);
+    for (let i = 1; i < 4; i++) freeSky(i);               // higher skies depend on the world: rebuilt on demand
+    buildScenery();
+    buildSprites();
+  }
+
+  // --- scenery layers -------------------------------------------------
+  function buildScenery() {
+    const E = ENVS[envId];
+    const W = canvas.width;
+    const top = hexRgb(E.sky.top), bot = hexRgb(E.sky.bottom);
+    const fogC = mixRgb(bot, [200, 215, 255], 0.18);
+    const cx = ox + (GW + DX) / 2 * scale;            // centre of the play area on screen
+    const towerHalf = Math.max(1, 110 * scale);
+    cityLayers.length = 0;
+    twinkles.length = 0;
+
+    E.layers.forEach((L, li) => {
+      const lh = Math.ceil((L.hMax + 50) * scale);       // room for roofs, antennas and peaks (whole px)
+      const c = document.createElement('canvas');
+      c.width = W;
+      c.height = lh;
+      const g = c.getContext('2d');
+      const rnd = seeded(101 + li * 977 + envId.length * 31);
+      const body = mixRgb(mixRgb(top, bot, L.tone), fogC, L.fog);
+      const blds = [];                                    // [x, width, top y] (layout info)
+      const clearAt = x => {                              // shrink scenery right behind the tower
+        if (!L.clear) return 1;
+        const dc = Math.abs(x - cx) / towerHalf;
+        return L.clear + (1 - L.clear) * Math.min(1, Math.max(0, (dc - 0.6) / 0.9));
+      };
+      if (li === 0) {                                     // light glow behind the far layer
+        const gl = g.createLinearGradient(0, lh * 0.15, 0, lh);
+        gl.addColorStop(0, 'rgba(0,0,0,0)');
+        const glowC = envId === 'neon' ? [236, 72, 153] : envId === 'snow' ? [160, 220, 255] : [255, 160, 120];
+        gl.addColorStop(1, rgba(mixRgb(bot, glowC, 0.3), 0.4));
+        g.fillStyle = gl;
+        g.fillRect(0, 0, W, lh);
+      }
+      if (L.shape === 'tower') buildTowers(g, L, li, W, lh, body, rnd, blds, clearAt, cx, towerHalf);
+      else if (L.shape === 'dune') buildDunes(g, L, W, lh, body, rnd, blds, clearAt);
+      else if (L.shape === 'mesa') buildMesas(g, L, W, lh, body, rnd, blds, clearAt);
+      else if (L.shape === 'peak') buildPeaks(g, L, W, lh, body, rnd, blds, clearAt);
+      else if (L.shape === 'pine') buildPines(g, L, W, lh, body, rnd, blds, clearAt);
+
+      // Atmospheric fade toward the base, applied only on top of the scenery
+      g.globalCompositeOperation = 'source-atop';
+      const fg = g.createLinearGradient(0, lh * 0.35, 0, lh);
+      fg.addColorStop(0, rgba(fogC, 0));
+      fg.addColorStop(1, rgba(fogC, L.baseFog));
+      g.fillStyle = fg;
+      g.fillRect(0, 0, W, lh);
+      g.globalCompositeOperation = 'source-over';
+      // Opaque haze band at the base (also across gaps), continued below the layer each frame
+      const fillC = mixRgb(mixRgb(body, fogC, L.baseFog), fogC, 0.25);
+      const bandH = 40 * scale;
+      const bg2 = g.createLinearGradient(0, lh - bandH, 0, lh);
+      bg2.addColorStop(0, rgba(fillC, 0));
+      bg2.addColorStop(1, rgba(fillC, 1));
+      g.fillStyle = bg2;
+      g.fillRect(0, lh - bandH, W, bandH);
+      cityLayers.push({ c, lh, f: L.f, lift: L.lift, fill: L.lift > 0 ? rgba(fillC) : null, blds });
+    });
+
+    // Haze below: a 1px-wide gradient, stretched when drawn (almost no memory)
+    hazeCanvas.width = 1;
+    hazeCanvas.height = 256;
+    const zg = hazeCanvas.getContext('2d');
+    const zz = zg.createLinearGradient(0, 0, 0, 256);
+    zz.addColorStop(0, rgba(fogC, 0));
+    zz.addColorStop(1, rgba(mixRgb(fogC, [230, 236, 255], 0.25), 0.9));
+    zg.fillStyle = zz;
+    zg.fillRect(0, 0, 1, 256);
+
+    // Ground the tower stands on (world space; gradient starts at the ground edge)
+    const gr = E.ground;
+    const gTop = gr.top || mixRgb(top, bot, 0.42), gBot = gr.bottom || mixRgb(top, [0, 0, 0], 0.3);
+    floorGrad = ctx.createLinearGradient(0, 0, 0, 120);
+    floorGrad.addColorStop(0, rgba(gTop));
+    floorGrad.addColorStop(1, rgba(gBot));
+
+    sceneCanvas.width = canvas.width;
+    sceneCanvas.height = canvas.height;
+    sceneValid = false;
+  }
+
+  function buildTowers(g, L, li, W, lh, body, rnd, blds, clearAt, cx, towerHalf) {
+    const neon = !!L.neon;
+    const warm = [255, 214, 150], cool = [170, 205, 255];
+    const NEON = [[236, 72, 153], [34, 211, 238], [250, 204, 21], [167, 139, 250]];
+    const edge = rgba(mixRgb(body, [255, 255, 255], 0.08));
+    let x = -rnd() * 40;
+    while (x < W) {
+      const bw = (L.wMin + rnd() * (L.wMax - L.wMin)) * scale;
+      const dc = Math.abs(x + bw / 2 - cx) / towerHalf;
+      const bh = (L.hMin + Math.pow(rnd(), 1.4) * (L.hMax - L.hMin)) * scale * clearAt(x + bw / 2);
+      const y = lh - bh;
+      blds.push([x, bw, y]);
+      g.fillStyle = rgba(body);
+      g.fillRect(x, y, bw, bh);
+      g.fillStyle = edge;                                 // lit left edge: same key light as the blocks
+      g.fillRect(x, y, Math.max(1, bw * 0.06), bh);
+      const roof = rnd();
+      let ry = y;
+      if (roof < 0.35) {                                  // stepped top
+        const sw = bw * (0.45 + rnd() * 0.3), sh = (8 + rnd() * 14) * scale;
+        g.fillStyle = rgba(body);
+        g.fillRect(x + (bw - sw) / 2, y - sh, sw, sh);
+        ry = y - sh;
+      }
+      if (roof > 0.7 || roof < 0.12) {                    // antenna with a red beacon
+        const ah = (12 + rnd() * 24) * scale;
+        g.fillStyle = rgba(body);
+        g.fillRect(x + bw * 0.5 - 0.75, ry - ah, 1.5, ah);
+        g.fillStyle = 'rgba(255,90,90,0.8)';
+        g.fillRect(x + bw * 0.5 - 1.25, ry - ah - 1.5, 2.5, 2.5);
+      }
+      const nc = NEON[Math.floor(rnd() * NEON.length)];
+      if (neon) {                                         // glowing roof line
+        g.fillStyle = rgba(nc, li === 2 ? 0.85 : 0.6);
+        g.fillRect(x, y, bw, Math.max(1, 1.2 * scale));
+        if (rnd() < 0.35 && bw > 20 * scale) {            // vertical sign
+          const sw2 = 3.5 * scale, sh2 = Math.min(bh * 0.4, 60 * scale);
+          const sx2 = x + bw * (0.2 + rnd() * 0.6), sy2 = y + 10 * scale;
+          g.fillStyle = rgba(nc, 0.75);
+          g.fillRect(sx2, sy2, sw2, sh2);
+          if (li > 0 && twinkles.length < 10) twinkles.push({ li, x: sx2, y: sy2, w: sw2, h: sh2, c: rgba(nc, 1), ph: rnd() * 6.28, sp: 0.04 + rnd() * 0.05 });
+        }
+      }
+      // Windows: sparse, dimmed behind the tower
+      const lit = L.win * (0.5 + rnd());
+      const ws = L.wsz * scale;
+      const sx = ws * 2.4, sy = ws * 3.2;
+      const wc = neon ? (rnd() < 0.5 ? NEON[0] : NEON[1]) : (rnd() < 0.7 ? warm : cool);
+      const dim = L.clear && dc < 1.2 ? 0.35 : 1;
+      for (let wy = y + sy; wy < lh - sy; wy += sy) {
+        for (let wx = x + sx * 0.7; wx < x + bw - ws - sx * 0.3; wx += sx) {
+          if (rnd() >= lit) continue;
+          g.fillStyle = rgba(wc, ((0.35 + rnd() * 0.45) * L.winA * dim).toFixed(3));
+          g.fillRect(wx, wy, ws, ws * 1.3);
+          if (!neon && li > 0 && dim === 1 && twinkles.length < 8 && rnd() < 0.02) {
+            twinkles.push({ li, x: wx, y: wy, w: ws, h: ws * 1.3, c: rgba(wc, 1), ph: rnd() * 6.28, sp: 0.02 + rnd() * 0.03 });
+          }
+        }
+      }
+      x += bw + rnd() * L.gap * scale;
+    }
+  }
+
+  // Smooth dune ridges from a few summed sine waves, with a light crest line
+  function buildDunes(g, L, W, lh, body, rnd, blds, clearAt) {
+    const ph = [rnd() * 6.28, rnd() * 6.28, rnd() * 6.28];
+    const wl = L.wave.map(v => v * scale * (0.8 + rnd() * 0.4));
+    const pts = [];
+    for (let x = 0; x <= W + 4; x += 4) {
+      const n = 0.5 + 0.28 * Math.sin(x / wl[0] + ph[0]) + 0.15 * Math.sin(x / wl[1] + ph[1]) + 0.07 * Math.sin(x / wl[2] + ph[2]);
+      const h = (L.hMin + (L.hMax - L.hMin) * Math.max(0, Math.min(1, n))) * scale * clearAt(x);
+      pts.push([x, lh - h]);
+    }
+    for (let i = 0; i < pts.length; i += 6) blds.push([pts[i][0], 24, pts[i][1]]);
+    g.beginPath();
+    g.moveTo(0, lh);
+    pts.forEach(([x, y]) => g.lineTo(x, y));
+    g.lineTo(W, lh);
+    g.closePath();
+    g.fillStyle = rgba(body);
+    g.fill();
+    // sunlit upper slopes
+    g.globalCompositeOperation = 'source-atop';
+    const sg = g.createLinearGradient(0, lh - L.hMax * scale, 0, lh);
+    sg.addColorStop(0, 'rgba(255,214,170,0.22)');
+    sg.addColorStop(1, 'rgba(255,214,170,0)');
+    g.fillStyle = sg;
+    g.fillRect(0, 0, W, lh);
+    g.globalCompositeOperation = 'source-over';
+    g.beginPath();
+    pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
+    g.strokeStyle = 'rgba(255,226,190,0.35)';
+    g.lineWidth = Math.max(1, scale);
+    g.stroke();
+  }
+
+  // Flat-topped buttes with strata, and the odd pyramid
+  function buildMesas(g, L, W, lh, body, rnd, blds, clearAt) {
+    let x = -rnd() * 60 * scale;
+    while (x < W) {
+      const bw = (L.wMin + rnd() * (L.wMax - L.wMin)) * scale;
+      const bh = (L.hMin + rnd() * (L.hMax - L.hMin)) * scale * clearAt(x + bw / 2);
+      const y = lh - bh;
+      blds.push([x, bw, y]);
+      g.fillStyle = rgba(body);
+      g.beginPath();
+      if (rnd() < L.pyr) {
+        g.moveTo(x, lh); g.lineTo(x + bw / 2, y); g.lineTo(x + bw, lh);
+      } else {
+        const inset = bw * (0.12 + rnd() * 0.12);
+        g.moveTo(x, lh); g.lineTo(x + inset, y); g.lineTo(x + bw - inset * 0.8, y); g.lineTo(x + bw, lh);
+      }
+      g.closePath();
+      g.fill();
+      g.save();
+      g.clip();
+      for (let sy = y + 8 * scale; sy < lh; sy += 11 * scale) {
+        g.fillStyle = 'rgba(255,220,190,0.07)';
+        g.fillRect(x, sy, bw, 2 * scale);
+      }
+      g.fillStyle = 'rgba(255,226,196,0.1)';             // lit left side
+      g.fillRect(x, y, bw * 0.3, bh);
+      g.restore();
+      x += bw + (10 + rnd() * L.gap) * scale;
+    }
+  }
+
+  // Jagged mountain range with snow caps
+  function buildPeaks(g, L, W, lh, body, rnd, blds, clearAt) {
+    const peaks = [];
+    let x = -rnd() * 40 * scale;
+    while (x < W + 120 * scale) {
+      const bw = (L.wMin + rnd() * (L.wMax - L.wMin)) * scale;
+      const ph = (L.hMin + rnd() * (L.hMax - L.hMin)) * scale * clearAt(x);
+      peaks.push([x, lh - ph, ph]);
+      x += bw;
+    }
+    const valleys = [];
+    for (let i = 0; i < peaks.length - 1; i++) {
+      const vh = Math.min(peaks[i][2], peaks[i + 1][2]) * (0.45 + rnd() * 0.2);
+      valleys.push([(peaks[i][0] + peaks[i + 1][0]) / 2 + (rnd() - 0.5) * 8 * scale, lh - vh]);
+    }
+    g.beginPath();
+    g.moveTo(peaks[0][0] - 60 * scale, lh);
+    peaks.forEach((p, i) => { g.lineTo(p[0], p[1]); if (valleys[i]) g.lineTo(valleys[i][0], valleys[i][1]); });
+    g.lineTo(peaks[peaks.length - 1][0] + 60 * scale, lh);
+    g.closePath();
+    g.fillStyle = rgba(body);
+    g.fill();
+    g.save();
+    g.clip();                                              // caps and light only inside the range
+    for (const [px, py, ph] of peaks) {
+      blds.push([px - 20 * scale, 40 * scale, py]);
+      const cap = ph * (0.22 + rnd() * 0.1);
+      g.fillStyle = `rgba(240,248,255,${L.cap || 0.8})`;
+      g.beginPath();
+      g.moveTo(px, py - 2);
+      g.lineTo(px - cap * 1.1, py + cap);
+      g.lineTo(px - cap * 0.4, py + cap * 0.8);
+      g.lineTo(px, py + cap * 1.05);
+      g.lineTo(px + cap * 0.5, py + cap * 0.75);
+      g.lineTo(px + cap * 1.1, py + cap);
+      g.closePath();
+      g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.07)';             // lit left faces
+      g.beginPath();
+      g.moveTo(px, py); g.lineTo(px - ph * 0.9, lh); g.lineTo(px, lh);
+      g.closePath();
+      g.fill();
+    }
+    g.restore();
+  }
+
+  // Low ridge with pine trees and snowy tips
+  function buildPines(g, L, W, lh, body, rnd, blds, clearAt) {
+    const ridge = 12 * scale;
+    g.fillStyle = rgba(body);
+    g.fillRect(0, lh - ridge, W, ridge);
+    let x = -rnd() * 10 * scale;
+    while (x < W) {
+      const tw = (L.wMin + rnd() * (L.wMax - L.wMin)) * scale;
+      const th = (L.hMin + rnd() * (L.hMax - L.hMin)) * scale * clearAt(x + tw / 2);
+      if (th > 10 * scale) {
+        const base = lh - ridge * 0.6, tx = x + tw / 2, ty = base - th;
+        blds.push([x, tw, ty]);
+        g.fillStyle = rgba(body);
+        for (let k = 0; k < 3; k++) {
+          const ky = ty + th * k * 0.28, kw = tw * (0.55 + k * 0.25);
+          g.beginPath();
+          g.moveTo(tx, ky); g.lineTo(tx - kw / 2, ky + th * 0.42); g.lineTo(tx + kw / 2, ky + th * 0.42);
+          g.closePath();
+          g.fill();
+          g.fillStyle = 'rgba(240,248,255,0.55)';
+          g.beginPath();
+          g.moveTo(tx, ky); g.lineTo(tx - kw * 0.16, ky + th * 0.12); g.lineTo(tx + kw * 0.16, ky + th * 0.12);
+          g.closePath();
+          g.fill();
+          g.fillStyle = rgba(body);
+        }
+        g.fillRect(tx - 1.5 * scale, base - th * 0.1, 3 * scale, th * 0.12);
+      }
+      x += tw * (0.55 + rnd() * 0.7);
+    }
+  }
+
+  // --- higher skies (built only when the tower gets there) -----------
+  function freeSky(i) { if (i > 0 && skyBuilt[i]) { skyStage[i].width = skyStage[i].height = 0; skyBuilt[i] = false; } }
+  function ensureSky(i) { if (i > 0 && !skyBuilt[i]) { buildSky(i); skyBuilt[i] = true; } }
+  function buildSky(i) {
+    const W = canvas.width, H = canvas.height;
+    const c = skyStage[i];
+    c.width = W;
+    c.height = H;
+    const g = c.getContext('2d');
+    const E = ENVS[envId];
+    const top = hexRgb(E.sky.top), bot = hexRgb(E.sky.bottom);
+    const fogC = mixRgb(bot, [200, 215, 255], 0.18);
+    const dp = H / 800;
+    const stars = (n, seed, maxY, bright) => {
+      const sr = seeded(seed);
+      for (let k = 0; k < n; k++) {
+        const y = sr() * H * maxY;
+        const sz = (0.6 + sr() * 1.3) * dp;
+        g.fillStyle = `rgba(255,255,255,${((0.25 + sr() * 0.6) * bright * (1 - 0.6 * y / H)).toFixed(3)})`;
+        g.fillRect(sr() * W, y, sz, sz);
+      }
+    };
+    const grad = stops => { const s = g.createLinearGradient(0, 0, 0, H); stops.forEach(([o, col]) => s.addColorStop(o, col)); g.fillStyle = s; g.fillRect(0, 0, W, H); };
+    const earth = (topFrac, glowA) => {
+      const R = Math.max(W, H) * 1.5;
+      const ex = W / 2, ey = H * topFrac + R;
+      const eg = g.createRadialGradient(ex, ey - R * 0.9, R * 0.05, ex, ey, R);
+      eg.addColorStop(0, '#2f6fb0');
+      eg.addColorStop(0.6, '#163d6e');
+      eg.addColorStop(1, '#0a1f3d');
+      g.fillStyle = eg;
+      g.beginPath(); g.arc(ex, ey, R, 0, Math.PI * 2); g.fill();
+      const cr = seeded(55);
+      for (let k = 0; k < 14; k++) {                       // cloud swirls on the planet
+        g.fillStyle = `rgba(255,255,255,${(0.05 + cr() * 0.08).toFixed(3)})`;
+        g.beginPath();
+        g.ellipse(cr() * W, H * topFrac + H * (0.02 + cr() * 0.2), W * (0.05 + cr() * 0.12), H * (0.006 + cr() * 0.01), 0, 0, Math.PI * 2);
+        g.fill();
+      }
+      g.strokeStyle = `rgba(125,200,255,${0.75 * glowA})`;
+      g.lineWidth = H * 0.006;
+      g.beginPath(); g.arc(ex, ey, R, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = `rgba(90,170,255,${0.2 * glowA})`;
+      g.lineWidth = H * 0.07;
+      g.beginPath(); g.arc(ex, ey, R + H * 0.035, 0, Math.PI * 2); g.stroke();
+    };
+    if (i === 1) {                                        // high open sky with stars
+      grad([[0, rgba(mixRgb(top, [0, 0, 0], 0.45))], [0.65, rgba(mixRgb(top, bot, 0.45))], [1, rgba(mixRgb(bot, fogC, 0.5))]]);
+      stars(160, 4242, 0.8, 1);
+    } else if (i === 2) {                                 // stratosphere: deep blue, planet curve below
+      grad([[0, '#02040c'], [0.55, '#06163a'], [1, '#1b4c8a']]);
+      stars(120, 777, 0.7, 0.8);
+      earth(0.8, 1);
+    } else {                                              // space: black, dense stars, milky band
+      grad([[0, '#000004'], [1, '#05071a']]);
+      stars(300, 9191, 1, 1.2);
+      const mr = seeded(31337);
+      for (let k = 0; k < 420; k++) {
+        const u = mr();
+        const bx = u * W, by = H * (0.15 + u * 0.55) + (mr() - 0.5) * H * 0.12;
+        g.fillStyle = `rgba(200,210,255,${(0.04 + mr() * 0.12).toFixed(3)})`;
+        g.fillRect(bx, by, 1.4 * dp, 1.4 * dp);
+      }
+      earth(0.95, 0.6);
+    }
+    const vg = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.78);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,0.3)');
+    g.fillStyle = vg;
+    g.fillRect(0, 0, W, H);
+  }
+  const skyCanvas = i => skyStage[i];
+  // 0 = ground sky, 1 = high sky, 2 = stratosphere, 3 = space (fractions cross-fade)
+  const skyLevel = h => smooth(CITY.skyFrom, CITY.skyTo, h) + smooth(55, 70, h) + smooth(78, 92, h);
+
+  // --- sprites (clouds, fly-bys, moon) --------------------------------
+  function buildSprites() {
+    const W = canvas.width, H = canvas.height;
+    const E = ENVS[envId];
+    const bot = hexRgb(E.sky.bottom);
+    const fogC = mixRgb(bot, [200, 215, 255], 0.18);
+    const dp = H / 800;
+    const cloudC = mixRgb(fogC, [235, 240, 255], 0.55);
+    const puff = (cw, ch, seed, alpha) => {
+      const c = document.createElement('canvas');
+      c.width = Math.ceil(cw);
+      c.height = Math.ceil(ch);
+      const g = c.getContext('2d');
+      const r = seeded(seed);
+      for (let i = 0; i <= 10; i++) {
+        const u = i / 10;
+        const px = cw * (0.12 + 0.76 * u) + (r() - 0.5) * cw * 0.06;
+        const py = ch * (0.6 - Math.sin(u * Math.PI) * 0.18);
+        const rad = ch * (0.26 + 0.28 * Math.sin(u * Math.PI) + r() * 0.08);
+        const rg = g.createRadialGradient(px, py, 0, px, py, rad);
+        rg.addColorStop(0, rgba(cloudC, alpha));
+        rg.addColorStop(1, rgba(cloudC, 0));
+        g.fillStyle = rg;
+        g.fillRect(px - rad, py - rad, rad * 2, rad * 2);
+      }
+      return c;
+    };
+    cloudSprites.length = 0;
+    for (let v = 0; v < 4; v++) {
+      const sz = v < 2 ? 0.7 : 1.05;                       // two shapes, two sizes
+      cloudSprites.push(puff(W * 0.55 * sz, H * 0.085 * sz, 77 + (v % 2) * 31, 0.62));
+    }
+    fgSprites.length = 0;                                  // big near clouds that pass in front
+    fgSprites.push(puff(W * 0.95, H * 0.16, 501, 0.72), puff(W * 0.8, H * 0.13, 733, 0.72));
+    clouds.length = 0;
+    const cr = seeded(9001);
+    for (let i = 0; i < 8; i++) {
+      clouds.push({ x: (cr() * 1.2 - 0.2) * W, y0: cr() * (H * 1.6),
+        f: 0.45 + cr() * 0.45, a: 0.35 + cr() * 0.4, v: (cr() - 0.5) * 0.25 * dp, sp: (i % 2) + (cr() < 0.5 ? 0 : 2) });
+    }
+    fgClouds.length = 0;
+    for (let i = 0; i < 3; i++) {
+      fgClouds.push({ x: (cr() * 1.1 - 0.3) * W, y0: cr() * H * 2, f: 1.5 + cr() * 0.4, a: 0.45 + cr() * 0.2, v: (cr() - 0.5) * 0.5 * dp, sp: i % 2 });
+    }
+
+    // Fly-by silhouettes, lit softly so they read against a night sky
+    const d = H / Math.max(1, innerHeight);
+    const ink = rgba(E.ink, 0.85), inkSoft = rgba(E.ink, 0.5);
+    const mk = (w, h, draw) => {
+      const c = document.createElement('canvas');
+      c.width = Math.ceil(w * d);
+      c.height = Math.ceil(h * d);
+      const g = c.getContext('2d');
+      g.scale(d, d);
+      g.lineCap = 'round';
+      g.lineJoin = 'round';
+      draw(g, w, h);
+      return c;
+    };
+    const flock = up => (g) => {
+      g.strokeStyle = ink;
+      g.lineWidth = 1.5;
+      [[6, 8], [15, 4], [24, 9], [32, 5], [19, 12]].forEach(([bx, by]) => {
+        g.beginPath();
+        g.moveTo(bx - 4, by + (up ? -2.5 : 2));
+        g.lineTo(bx, by);
+        g.lineTo(bx + 4, by + (up ? -2.5 : 2));
+        g.stroke();
+      });
+    };
+    spr.birds = [mk(40, 16, flock(true)), mk(40, 16, flock(false))];
+    spr.heli = mk(48, 22, g => {
+      g.fillStyle = ink;
+      g.beginPath(); g.ellipse(17, 12, 10, 5.5, 0, 0, Math.PI * 2); g.fill();
+      g.fillRect(25, 10.5, 18, 2.4);
+      g.fillRect(42, 7, 2.2, 7);
+      g.fillRect(4, 4.5, 28, 1.6);
+      g.fillRect(16.4, 5, 1.4, 3);
+      g.strokeStyle = inkSoft; g.lineWidth = 1.2;
+      g.beginPath(); g.moveTo(10, 19); g.lineTo(25, 19); g.stroke();
+      g.fillStyle = 'rgba(150,220,255,0.6)';
+      g.beginPath(); g.ellipse(12, 11, 4, 3, 0, 0, Math.PI * 2); g.fill();
+    });
+    const pal = [[244, 114, 182], [250, 204, 21], [56, 189, 248], [52, 211, 153]];
+    spr.balloon = [0, 1].map(k => mk(26, 38, g => {
+      const c1 = pal[k * 2], c2 = pal[k * 2 + 1];
+      g.save();
+      g.beginPath(); g.arc(13, 12, 11, Math.PI * 0.95, Math.PI * 2.05); g.lineTo(16, 26); g.lineTo(10, 26); g.closePath();
+      g.clip();
+      for (let s = 0; s < 6; s++) { g.fillStyle = rgba(s % 2 ? c1 : c2, 0.9); g.fillRect(s * 4.4, 0, 4.4, 28); }
+      g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(2, 0, 7, 28);
+      g.restore();
+      g.strokeStyle = inkSoft; g.lineWidth = 0.8;
+      g.beginPath(); g.moveTo(10, 26); g.lineTo(11, 31); g.moveTo(16, 26); g.lineTo(15, 31); g.stroke();
+      g.fillStyle = 'rgba(120,80,50,0.95)'; g.fillRect(10.5, 31, 5, 4);
+    }));
+    spr.plane = mk(72, 24, g => {
+      g.fillStyle = ink;
+      g.beginPath(); g.moveTo(6, 12); g.quadraticCurveTo(4, 9.5, 10, 9.5); g.lineTo(62, 9.5); g.quadraticCurveTo(68, 11.5, 62, 13.5); g.lineTo(10, 13.5); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(30, 11); g.lineTo(44, 11); g.lineTo(34, 21); g.lineTo(29, 21); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(8, 10); g.lineTo(13, 10); g.lineTo(9, 3); g.lineTo(6, 3); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(120,160,220,0.7)';
+      for (let k = 0; k < 9; k++) g.fillRect(18 + k * 4.5, 10.6, 2, 1.4);
+    });
+    spr.jet = mk(30, 10, g => {
+      g.fillStyle = ink;
+      g.beginPath(); g.moveTo(2, 5); g.lineTo(26, 4); g.lineTo(28, 5); g.lineTo(26, 6); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(12, 5); g.lineTo(18, 5); g.lineTo(13, 9.5); g.lineTo(11, 9.5); g.closePath(); g.fill();
+    });
+    spr.wballoon = mk(16, 34, g => {
+      g.fillStyle = 'rgba(245,248,255,0.92)';
+      g.beginPath(); g.arc(8, 8, 6.5, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = inkSoft; g.lineWidth = 0.8;
+      g.beginPath(); g.moveTo(8, 14.5); g.lineTo(8, 27); g.stroke();
+      g.fillStyle = 'rgba(250,204,21,0.9)'; g.fillRect(6, 27, 4, 4);
+    });
+    spr.sat = mk(56, 24, g => {
+      g.fillStyle = 'rgba(80,130,220,0.95)';
+      g.fillRect(2, 9, 18, 7); g.fillRect(36, 9, 18, 7);
+      g.strokeStyle = 'rgba(200,220,255,0.6)'; g.lineWidth = 0.6;
+      for (let k = 1; k < 4; k++) { g.beginPath(); g.moveTo(2 + k * 4.5, 9); g.lineTo(2 + k * 4.5, 16); g.moveTo(36 + k * 4.5, 9); g.lineTo(36 + k * 4.5, 16); g.stroke(); }
+      g.fillStyle = 'rgba(230,190,110,0.95)'; g.fillRect(21, 7, 14, 11);
+      g.fillStyle = ink; g.fillRect(20, 12, 1.5, 1.5); g.fillRect(35, 12, 1.5, 1.5);
+      g.strokeStyle = ink; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(28, 7); g.lineTo(28, 2); g.stroke();
+    });
+    // Moon: one sprite, scaled up while in space
+    const mr = Math.ceil(H * 0.1);
+    const moon = document.createElement('canvas');
+    moon.width = moon.height = mr * 2 + 4;
+    const mg = moon.getContext('2d');
+    const mgd = mg.createRadialGradient(mr * 0.7, mr * 0.7, mr * 0.1, mr + 2, mr + 2, mr);
+    mgd.addColorStop(0, '#f8fafc');
+    mgd.addColorStop(1, '#94a3b8');
+    mg.fillStyle = mgd;
+    mg.beginPath(); mg.arc(mr + 2, mr + 2, mr, 0, Math.PI * 2); mg.fill();
+    const crt = seeded(808);
+    for (let k = 0; k < 9; k++) {
+      mg.fillStyle = `rgba(71,85,105,${(0.18 + crt() * 0.2).toFixed(2)})`;
+      const a = crt() * Math.PI * 2, rr = crt() * mr * 0.7;
+      mg.beginPath(); mg.arc(mr + 2 + Math.cos(a) * rr, mr + 2 + Math.sin(a) * rr, mr * (0.06 + crt() * 0.14), 0, Math.PI * 2); mg.fill();
+    }
+    spr.moon = moon;
+  }
+
+  // Background stack for one frame: skies, scenery layers, haze.
+  // Positions use a whole-pixel camera value so the cached and direct paths look identical.
+  function paintScene(g, camPx, sky, hazeA) {
+    const W = canvas.width, H = canvas.height;
+    const a = Math.min(3, Math.floor(sky)), fr = sky - a;
+    g.globalAlpha = 1;
+    ensureSky(a);
+    g.drawImage(skyCanvas(a), 0, 0);
+    if (fr > 0.004 && a < 3) {
+      ensureSky(a + 1);
+      g.globalAlpha = fr;
+      g.drawImage(skyCanvas(a + 1), 0, 0);
+      g.globalAlpha = 1;
+    }
+    for (let i = 1; i < 4; i++) if (i !== a && i !== a + 1) freeSky(i);
+    for (const L of cityLayers) {
+      // whole-pixel position: a plain 1:1 copy instead of resampling
+      const base = Math.round(oy + (GROUND - L.lift) * scale + camPx * L.f);
+      const y = base - L.lh;
+      if (y >= H) continue;                               // scrolled away below the screen
+      g.drawImage(L.c, 0, y);
+      if (L.fill && base < H) {                           // hazy land below this layer
+        g.fillStyle = L.fill;
+        g.fillRect(0, base - 1, W, H - base + 1);
+      }
+    }
+    if (hazeA > 0.01) {
+      g.globalAlpha = hazeA;
+      g.drawImage(hazeCanvas, 0, H * 0.45, W, H * 0.55);
+      g.globalAlpha = 1;
+    }
+  }
+
+  // Ambient particles in screen space (fixed set, no allocation per frame)
+  const motes = [];
+  {
+    const rnd = seeded(7);
+    for (let i = 0; i < 34; i++) motes.push({ x: rnd(), y: rnd(), s: 0.6 + rnd() * 1.4, a: 0.12 + rnd() * 0.3, p: rnd() * 6.28 });
+  }
+
+  // ---------------------------------------------------------------
+  // Sound: procedural Web Audio, no sound files
+  // ---------------------------------------------------------------
+  let audioCtx = null, master = null, noiseBuf = null;
+  const MAX_VOICES = 16;
+  let voices = 0, voicesStarted = 0;
+  const lastPlay = {};
+  function ensureAudio() {
+    try {
+      if (!audioCtx) {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!AC) return;
+        audioCtx = new AC();
+        const comp = audioCtx.createDynamicsCompressor();   // keeps stacked sounds from getting harsh
+        comp.threshold.value = -18;
+        comp.knee.value = 12;
+        comp.ratio.value = 4;
+        master = audioCtx.createGain();
+        master.gain.value = 0.8;
+        master.connect(comp);
+        comp.connect(audioCtx.destination);
+        // Preloaded once: a short noise buffer shared by every noisy sound
+        noiseBuf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.5), audioCtx.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) {}
+  }
+  // Cooldown per sound so rapid taps don't pile up
+  function ready(key, gapMs) {
+    if (!soundOn || !audioCtx || !master) return false;
+    const now = performance.now();
+    if (lastPlay[key] && now - lastPlay[key] < gapMs) return false;
+    lastPlay[key] = now;
+    return true;
+  }
+  function tone(freq, dur, type, vol, delay = 0, endFreq = 0) {
+    if (voices >= MAX_VOICES) return;
+    const t = audioCtx.currentTime + delay;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freq, t);
+    if (endFreq) o.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g);
+    g.connect(master);
+    voices++; voicesStarted++;
+    o.onended = () => { voices--; };
+    o.start(t);
+    o.stop(t + dur + 0.05);
+  }
+  function noise(dur, vol, filterType, freq, delay = 0, endFreq = 0, q = 1) {
+    if (voices >= MAX_VOICES) return;
+    const t = audioCtx.currentTime + delay;
+    const src = audioCtx.createBufferSource();
+    src.buffer = noiseBuf;
+    const f = audioCtx.createBiquadFilter();
+    f.type = filterType;
+    f.Q.value = q;
+    f.frequency.setValueAtTime(freq, t);
+    if (endFreq) f.frequency.exponentialRampToValueAtTime(endFreq, t + dur);
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(f);
+    f.connect(g);
+    g.connect(master);
+    voices++; voicesStarted++;
+    src.onended = () => { voices--; };
+    src.start(t, Math.random() * 0.15);
+    src.stop(t + dur + 0.02);
+  }
+  // Major pentatonic notes: combos climb this scale, so it always sounds pleasant
+  const PENTA = [523.25, 587.33, 659.25, 783.99, 880, 1046.5, 1174.66, 1318.51, 1567.98, 1760];
+  const sfx = {
+    tap() {
+      if (!ready('tap', 40)) return;
+      noise(0.045, 0.16, 'bandpass', 2300, 0, 0, 1.2);
+      tone(190, 0.08, 'triangle', 0.22, 0, 120);
+    },
+    perfect(n) {
+      if (!ready('perfect', 40)) return;
+      noise(0.018, 0.2, 'highpass', 4200);                     // sharp click
+      const f = PENTA[Math.min(n - 1, PENTA.length - 1)];
+      tone(f, 0.38, 'sine', 0.19, 0.004);                      // chime
+      tone(f * 2, 0.2, 'sine', 0.045, 0.004);                  // shimmer
+      if (n >= 3) tone(f * 1.5, 0.3, 'sine', 0.06, 0.06);      // harmony on bigger combos
+    },
+    fall() {
+      if (!ready('fall', 120)) return;
+      noise(0.26, 0.06, 'lowpass', 1400, 0.02, 260);
+    },
+    fail() {
+      if (!ready('fail', 300)) return;
+      tone(392, 0.18, 'triangle', 0.15, 0);
+      tone(311.13, 0.2, 'triangle', 0.14, 0.13);
+      tone(233.08, 0.42, 'triangle', 0.14, 0.27, 175);
+    },
+    heart() {
+      if (!ready('heart', 250)) return;
+      tone(64, 0.12, 'sine', 0.34);
+      tone(54, 0.14, 'sine', 0.26, 0.15);
+    },
+    cool() {
+      if (!ready('cool', 300)) return;
+      noise(0.32, 0.07, 'highpass', 3200, 0, 1800);
+    },
+    win() {
+      if (!ready('win', 500)) return;
+      [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, 0.3, 'sine', 0.16, i * 0.09));
+      tone(1567.98, 0.5, 'sine', 0.05, 0.36);
+    },
+    ui() {                                                     // soft menu tick
+      if (!ready('ui', 60)) return;
+      tone(1320, 0.05, 'sine', 0.05);
+    },
+    unlock() {
+      if (!ready('unlock', 400)) return;
+      [783.99, 1046.5, 1318.51].forEach((f, i) => tone(f, 0.22, 'sine', 0.09, i * 0.07));
+    }
+  };
+  function buzz(pattern) {
+    if (!vibeOn || !canVibrate) return;
+    try { navigator.vibrate(pattern); } catch (e) {}
+  }
+
+  // ---------------------------------------------------------------
+  // Effects: pooled particles and rings (no allocation while playing)
+  // ---------------------------------------------------------------
+  const MAX_P = 180;
+  const pool = [];
+  for (let i = 0; i < MAX_P; i++) pool.push({ on: false, x: 0, y: 0, vx: 0, vy: 0, life: 0, max: 1, s: 1, g: 0, d: 0.985, k: 0, color: '#fff', cam: 0 });
+  let pCursor = 0;
+  function emit(x, y, vx, vy, life, s, color, g, d = 0.985, k = 0) {
+    let p = null;
+    for (let k = 0; k < MAX_P; k++) {
+      const c = pool[(pCursor + k) % MAX_P];
+      if (!c.on) { p = c; pCursor = (pCursor + k + 1) % MAX_P; break; }
+    }
+    if (!p) { p = pool[pCursor]; pCursor = (pCursor + 1) % MAX_P; }   // pool full: recycle
+    p.on = true; p.x = x; p.y = y; p.vx = vx; p.vy = vy;
+    p.life = life; p.max = life; p.s = s; p.g = g; p.d = d; p.k = k; p.color = color; p.cam = camDown;
+  }
+  function sparkle(x, w, y, n, colors, power = 1) {
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.3;
+      const v = (1.2 + Math.random() * 2.6) * power;
+      emit(x + Math.random() * w, y, Math.cos(a) * v, Math.sin(a) * v,
+        28 + Math.random() * 26, 1.8 + Math.random() * 3, colors[i % colors.length], 0.16);
+    }
+  }
+  // Perfect burst: outward from the block's top edge, 18-36 frames of life (0.3-0.6 s)
+  function burst(x, w, y, n, colors, power) {
+    const cx = x + w / 2;
+    for (let i = 0; i < n; i++) {
+      const px = x + Math.random() * w;
+      const side = (px - cx) / Math.max(1, w / 2);
+      const a = -Math.PI / 2 + side * 0.9 + (Math.random() - 0.5) * 0.9;
+      const v = (2.2 + Math.random() * 3.2) * power;
+      emit(px, y + Math.random() * 3, Math.cos(a) * v, Math.sin(a) * v,
+        18 + Math.random() * 18, 1.6 + Math.random() * 2.4, colors[i % colors.length], 0.05, 0.9, 0);
+    }
+  }
+  function sparks(x, w, y, n, color, power) {
+    for (let i = 0; i < n; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2;
+      const v = (4 + Math.random() * 3) * power;
+      emit(x + Math.random() * w, y, Math.cos(a) * v, Math.sin(a) * v, 14 + Math.random() * 10, 1.2, color, 0.08, 0.86, 1);
+    }
+  }
+  function dust(x, w, y) {
+    for (let i = 0; i < 4; i++) {
+      const side = i < 2 ? -1 : 1;
+      emit(side < 0 ? x : x + w, y + BH * 0.3, side * (0.3 + Math.random() * 0.8), -0.3 - Math.random() * 0.7,
+        16 + Math.random() * 8, 1.2 + Math.random(), 'rgba(255,255,255,0.7)', 0.04);
+    }
+  }
+  const MAX_R = 10;
+  const rings = [];
+  for (let i = 0; i < MAX_R; i++) rings.push({ on: false, x: 0, w: 0, row: 0, t: 0, max: 1, delay: 0, color: '#fff', lw: 2, grow: 16 });
+  let rCursor = 0;
+  function ring(x, w, row, color, delay, lw, grow, max = 26) {
+    const r = rings[rCursor];
+    rCursor = (rCursor + 1) % MAX_R;
+    r.on = true; r.x = x; r.w = w; r.row = row; r.t = -delay; r.max = max; r.color = color; r.lw = lw; r.grow = grow;
+  }
+  const lavaGrad = ctx.createLinearGradient(0, 0, 0, 160);
+  lavaGrad.addColorStop(0, 'rgba(251,146,60,0.78)');
+  lavaGrad.addColorStop(0.25, 'rgba(234,88,12,0.82)');
+  lavaGrad.addColorStop(1, 'rgba(127,29,29,0.94)');
+  const glowSprite = document.createElement('canvas');
+  glowSprite.width = glowSprite.height = 64;
+  {
+    const g = glowSprite.getContext('2d');
+    const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    r.addColorStop(0, 'rgba(255,255,255,0.9)');
+    r.addColorStop(0.35, 'rgba(255,255,255,0.32)');
+    r.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = r;
+    g.fillRect(0, 0, 64, 64);
+  }
+  const MAX_G = 2;
+  const glows = [];
+  for (let i = 0; i < MAX_G; i++) glows.push({ on: false, x: 0, w: 0, row: 0, t: 0, max: 1, str: 1 });
+  let gCursor = 0;
+  function glowFx(x, w, row, str, max = 16) {
+    const g = glows[gCursor];
+    gCursor = (gCursor + 1) % MAX_G;
+    g.on = true; g.x = x; g.w = w; g.row = row; g.t = 0; g.max = max; g.str = Math.min(str, 1);
+  }
+
+  // Fly-bys: a small pool of sprites drifting past (birds, helicopters, balloons, planes, satellites)
+  const MAX_FLY = 10;
+  const flys = [];
+  for (let i = 0; i < MAX_FLY; i++) flys.push({ on: false, type: '', x: 0, y0: 0, cam0: 0, f: 1, vx: 0, t: 0, k: 0 });
+  let flyNext = 0, flyTimer = 240;
+  const FLY_BY_ZONE = env => [
+    ['birds'],
+    env.low,
+    ['balloon', 'birds', 'balloon'],
+    ['plane', 'plane', 'balloon'],
+    ['jet', 'wballoon', 'jet'],
+    ['sat', 'sat', 'shoot'],
+  ];
+  function spawnFly(zone, fromAbove) {
+    const H = canvas.height, W = canvas.width;
+    const d = H / Math.max(1, innerHeight);
+    const list = FLY_BY_ZONE(ENVS[envId])[zone];
+    const type = list[Math.floor(Math.random() * list.length)];
+    const o = flys.find(f => !f.on);
+    if (!o) return;
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const sp = { birds: [0.5, 0.9], heli: [0.6, 1.0], balloon: [0.12, 0.28], plane: [1.4, 2.2], jet: [2.4, 3.4], wballoon: [0.05, 0.12], sat: [0.35, 0.65], shoot: [6, 9] }[type];
+    o.on = true; o.type = type; o.t = 0; o.k = Math.floor(Math.random() * 2);
+    o.vx = dir * (sp[0] + Math.random() * (sp[1] - sp[0])) * d;
+    o.f = { birds: 0.85, heli: 0.9, balloon: 0.8, plane: 0.6, jet: 0.4, wballoon: 0.75, sat: 0.3, shoot: 0 }[type];
+    o.cam0 = Math.round(camDown * scale);
+    const slow = Math.abs(o.vx) < 0.3 * d;
+    o.x = slow || fromAbove ? W * (0.08 + Math.random() * 0.84) : (dir > 0 ? -80 * d : W + 80 * d);
+    o.y0 = fromAbove ? -60 * d - Math.random() * H * 0.25 : H * (0.1 + Math.random() * 0.42);
+    if (type === 'shoot') { o.x = W * (0.1 + Math.random() * 0.6); o.y0 = H * (0.05 + Math.random() * 0.3); o.vx = Math.abs(o.vx); }
+  }
+
+  // ---------------------------------------------------------------
+  // Game state
+  // ---------------------------------------------------------------
+  let mode = 'menu';       // 'menu', 'level', 'endless' or 'rising'
+  let levelIdx = 0;
+  let cfg = { ...DEFAULT_CFG };
+  let stack = [];          // placed blocks: {x, w, c, sh, gold, t, amp, glow}; index 0 is the base
+  let debris = [];         // cut-off pieces falling away (visual only, never collide)
+  const MAX_DEBRIS = 14;
+  let mx = 0, mw = 200, dir = -1;   // moving block: left x, width, direction
+  let cur = { c: GOLD_C, sh: shades(GOLD_C), gold: false };
+  let camDown = 0;         // how far the tower has scrolled down
+  let camY = 0, camV = 0;  // camera impulse spring (visual only)
+  let shake = 0;           // screen shake strength (game over)
+  let flash = 0;           // restrained white flash (milestones / level complete)
+  let wobT = 0;            // phase for the "speed changes" twist
+  let time = 0;
+  let running = false;
+  let paused = false;
+  let combo = 0;
+  let perfects = 0;
+  let msgTimer = 0;
+  let lastScore = 0;
+  let newBest = false;
+  let failReason = 'miss';  // 'miss' or 'lava'
+  let lava = RISE.start;    // lava surface height in rows
+  let lavaClock = 0;        // seconds since the Rising run started
+  let lavaFreeze = 0;       // frames left in a milestone pause
+  let lavaFlash = 0;        // surface flash when a Perfect pushes it down
+  let danger = 0;           // 0..1, how close the lava is
+  let alt = 0;              // smoothed tower height in blocks (drives the environment)
+  let meterPulse = 0;
+  let runZone = 0;          // highest altitude zone reached this run
+  let runBestCombo = 0;
+  const sweep = { on: false, t: 0, row: 0, x: 0 };
+  let beatTimer = 0, beatPulse = 0;
+  let menuCam = 0;          // menu only: lifts the decorative tower into the gap above the Play button
+  let lastT = performance.now();
+
+  const score = () => stack.length - 1;
+  const rowY = i => GROUND - (i + 1) * BH + camDown;
+  const climbing = () => mode === 'endless' || mode === 'rising';
+
+  function refreshInfo() {
+    if (mode === 'level') infoEl.textContent = `Level ${levelIdx + 1} · ${score()}/${cfg.t}`;
+    else if (mode === 'rising') infoEl.textContent = lavaFreeze > 0 ? '❄ Lava paused' : `${fmtAlt(altMeters(score()))}${bestRising > 0 ? ` · Best ${bestRising}` : ' · Outrun the lava'}`;
+    else if (mode === 'endless') infoEl.textContent = `${fmtAlt(altMeters(score()))}${best > 0 ? ` · Best ${best}` : ''}`;
+    else infoEl.textContent = '';
+  }
+
+  function makeBlock(x, w, c, gold) {
+    return { x, w, c, sh: shades(c), gold, t: 999, amp: 0, glow: 0 };
+  }
+
+  function resetState() {
+    const w = cfg.base;
+    stack = [makeBlock((GW - w) / 2, w, colorFor(0), false)];
+    debris = [];
+    for (const p of pool) p.on = false;
+    for (const r of rings) r.on = false;
+    for (const g of glows) g.on = false;
+    for (const f of flys) f.on = false;
+    msgIsCombo = false;
+    mw = w;
+    combo = 0;
+    perfects = 0;
+    camDown = 0;
+    camY = 0;
+    camV = 0;
+    shake = 0;
+    flash = 0;
+    wobT = 0;
+    alt = 0;
+    meterPulse = 0;
+    runZone = 0;
+    runBestCombo = 0;
+    sweep.on = false;
+    lava = RISE.start;
+    lavaClock = 0;
+    lavaFreeze = 0;
+    lavaFlash = 0;
+    danger = 0;
+    beatTimer = 0;
+    beatPulse = 0;
+    failReason = 'miss';
+    flyNext = canvas.height * 0.25;
+    flyTimer = 120;
+    zoneEl.classList.remove('on');
+    dir = -1;
+    spawn();
+    scoreEl.textContent = '0';
+    refreshInfo();
+  }
+
+  function spawn() {
+    dir = -dir;
+    mx = dir > 0 ? 0 : GW - mw;
+    const gold = mode === 'level' && cfg.gold > 0 && stack.length % cfg.gold === 0;
+    const c = gold ? GOLD_C : colorFor(stack.length);
+    cur = { c, sh: shades(c), gold };
+  }
+
+  function begin() {
+    ensureAudio();
+    resetState();
+    running = true;
+    paused = false;
+    msgEl.classList.remove('show');
+    save.stats.games++;
+    root('game');
+  }
+
+  function startLevel(i) {
+    if (!levelOpen(i)) return;
+    mode = 'level';
+    levelIdx = i;
+    cfg = { ...DEFAULT_CFG, ...LEVELS[i] };
+    const w = WORLDS[worldOf(i)];
+    skinNow = w.skin;
+    setEnv(w.id);
+    begin();
+    const tw = twistLabel(cfg);
+    showMsg(tw || `Stack ${cfg.t}`, 130);
+  }
+
+  function startEndless() {
+    mode = 'endless';
+    cfg = { ...DEFAULT_CFG };
+    skinNow = save.skin;
+    setEnv(save.world);
+    begin();
+  }
+
+  function startRising() {
+    if (!risingUnlocked()) return;
+    mode = 'rising';
+    cfg = { ...DEFAULT_CFG };
+    skinNow = save.skin;
+    setEnv(save.world);
+    begin();
+    showMsg('Outrun the lava!', 110);
+  }
+
+  function restart() {
+    if (mode === 'level') startLevel(levelIdx);
+    else if (mode === 'rising') startRising();
+    else startEndless();
+  }
+
+  // tier 0 = info text; 1+ = combo strength (bigger and warmer)
+  let msgIsCombo = false;
+  function showMsg(t, dur = 60, tier = 0, isCombo = false) {
+    const span = document.createElement('span');
+    span.textContent = t;
+    span.className = isCombo && !fxLow ? 'combo' : 'info';
+    span.style.setProperty('--peak', (1.06 + Math.min(tier, 4) * 0.05).toFixed(2));
+    msgIsCombo = isCombo;
+    msgEl.replaceChildren(span);
+    msgEl.style.color = tier >= 4 ? '#fb923c' : tier >= 3 ? '#fcd34d' : '#fde047';
+    msgEl.style.fontSize = (20 + Math.min(tier, 4) * 1.5) + 'px';
+    msgEl.classList.add('show');
+    msgTimer = dur;
+  }
+  function showCombo(n) {
+    const tier = n >= 5 ? 4 : n >= 3 ? 3 : n;
+    showMsg(n > 1 ? `Perfect x${n}!` : 'Perfect!', 60, tier, true);
+  }
+  function clearCombo() {
+    msgEl.classList.remove('show');
+    msgTimer = 0;
+    msgIsCombo = false;
+  }
+  function popScore(big) {
+    scoreEl.classList.remove('pop', 'pop2');
+    void scoreEl.offsetWidth;   // restart the CSS animation
+    scoreEl.classList.add(big ? 'pop2' : 'pop');
+  }
+  let zoneTimer = 0;
+  function showZone(z) {
+    const Z = ZONES[z];
+    const name = Z.name || ENVS[envId].lowName;
+    zoneEl.innerHTML = `<b>${Z.icon} ${name}</b><small>${fmtAlt(altMeters(Z.at))}</small>`;
+    zoneEl.classList.add('on');
+    clearTimeout(zoneTimer);
+    zoneTimer = setTimeout(() => zoneEl.classList.remove('on'), 2600);
+  }
+
+  function kick(v) { camV += v; }
+
+  function addDebris(x, w, y, vx, va, sh) {
+    if (w < 0.5) return;
+    if (debris.length >= MAX_DEBRIS) debris.shift();   // cap: oldest piece is dropped
+    const spin = va * (40 / (40 + w * 0.6));          // wider pieces turn more slowly
+    debris.push({ x, w, y, vx, vy: 0, ang: 0, va: spin, age: 0, sh, cam: camDown });
+  }
+
+  function drop() {
+    if (!running || paused) return;
+    const top = stack[stack.length - 1];
+    const row = stack.length;
+    const left = Math.max(mx, top.x);
+    const right = Math.min(mx + mw, top.x + top.w);
+    const overlapW = right - left;
+    const perfect = overlapW > 0 && Math.abs(mx - top.x) <= (cur.gold ? GOLD_TOL : PERFECT_TOL);
+
+    // Missed completely, or a gold block that wasn't perfect: the whole block falls
+    if (overlapW <= 0 || (cur.gold && !perfect)) {
+      addDebris(mx, mw, rowY(row), dir * 1.2, dir * 0.035, cur.sh);
+      if (cur.gold && overlapW > 0) showMsg('Gold needs a perfect!', 90);
+      sfx.fail();
+      buzz(160);
+      fail();
+      return;
+    }
+
+    let newX, newW, amp, glow = 0;
+    if (perfect) {
+      combo++;
+      perfects++;
+      newX = top.x;
+      newW = top.w;
+      amp = 0.14 + Math.min(combo, 6) * 0.015;
+      glow = 1;
+    } else {
+      // Normal drop: chop off the overhang so it falls away (same cut as the original)
+      combo = 0;
+      newX = left;
+      newW = overlapW;
+      amp = 0.08;
+      let cut = false;
+      if (mx < left) { addDebris(mx, left - mx, rowY(row), -0.7, -0.035, cur.sh); cut = true; }
+      if (mx + mw > right) { addDebris(right, mx + mw - right, rowY(row), 0.7, 0.035, cur.sh); cut = true; }
+      if (cut) sfx.fall();
+    }
+
+    // Streak reward: after 3 perfects in a row the block gets a little wider
+    if (combo >= 3) {
+      newW = Math.min(cfg.base, newW + 4);
+      newX = Math.max(0, Math.min(GW - newW, newX - 2));
+    }
+
+    top.t = 999;   // stop the old top block's settle so blocks never visually separate
+    const nb = makeBlock(newX, newW, cur.c, cur.gold);
+    nb.t = 0;
+    nb.amp = amp;
+    nb.glow = glow;
+    stack.push(nb);
+    mw = newW;
+    const s = score();
+    scoreEl.textContent = s;
+    refreshInfo();
+    save.stats.blocks++;
+    if (perfect) save.stats.perfects++;
+    runBestCombo = Math.max(runBestCombo, combo);
+    // Height milestone: a quiet light sweep and a meter pulse (no sound, no message)
+    if (s % CITY.milestoneEvery === 0 && !(mode === 'level' && s >= cfg.t)) {
+      sweep.on = true;
+      sweep.t = 0;
+      sweep.row = row;
+      sweep.x = newX + (newW + DX) / 2;
+      meterPulse = 1;
+    }
+    // New altitude zone (Endless / Rising)
+    if (climbing()) {
+      const z = zoneAt(s);
+      if (z > runZone) { runZone = z; if (z > 0) showZone(z); }
+    }
+
+    // Feedback
+    const y = rowY(row);
+    if (perfect) {
+      const c = Math.min(combo, 10);                       // intensity stops growing after x10
+      const milestone = combo === 3 || (combo >= 5 && combo % 5 === 0);
+      const lite = fxLow ? 0.5 : 1;
+      sfx.perfect(combo);
+      buzz(milestone ? [18, 40, 30] : 12);
+      burst(newX, newW, y, Math.round((12 + Math.min(combo - 1, 8)) * lite),
+        [nb.sh.spark, '#ffffff', nb.sh.bright], 1 + (c - 1) * 0.06);
+      ring(newX, newW, row, `rgba(255,255,255,${Math.min(0.75 + c * 0.04, 1).toFixed(2)})`, 0, 1.4 + Math.min(c, 5) * 0.25, 14 + c * 2);
+      glowFx(newX, newW, row, 0.45 + Math.min(c, 6) * 0.08);
+      if (combo >= 2) sparks(newX, newW, y, Math.round(Math.min(4 + combo * 2, 14) * lite), '#ffffff', 1 + (c - 2) * 0.05);
+      if (combo >= 3) ring(newX, newW, row, nb.sh.bright, 4, 2.2, 26 + c * 2, 30);
+      if (milestone) {
+        burst(newX, newW, y, Math.round(8 * lite), ['#fde68a', '#fbbf24', '#ffffff'], 1.5);
+        ring(newX, newW, row, 'rgba(253,230,138,0.9)', 8, 2.4, 44, 34);
+        if (!fxLow) {
+          kick(1.2 + c * 0.06);
+          flash = Math.max(flash, 0.1);
+        }
+      }
+      if (mode === 'rising') {
+        lava = Math.max(RISE.start, lava - RISE.perfectPush);
+        lavaFlash = 1;
+        if (milestone) {
+          lavaFreeze = RISE.freeze;
+          sfx.cool();
+          refreshInfo();
+        }
+      }
+      showCombo(combo);
+      popScore(combo >= 2);
+    } else {
+      sfx.tap();
+      dust(newX, newW, y);
+      popScore(false);
+      if (msgIsCombo) clearCombo();                        // streak broken: retire the combo label
+    }
+
+    if (mode === 'level' && s >= cfg.t) {
+      levelComplete();
+      return;
+    }
+    spawn();
+  }
+
+  function stopPlay() {
+    running = false;
+    paused = false;
+  }
+
+  function endRunStats() {
+    save.stats.bestCombo = Math.max(save.stats.bestCombo, runBestCombo);
+    if (climbing()) save.stats.maxAlt = Math.max(save.stats.maxAlt, score());
+  }
+
+  function fail() {
+    stopPlay();
+    lastScore = score();
+    newBest = false;
+    if (mode === 'endless' && lastScore > best) {
+      best = save.best = lastScore;
+      newBest = true;
+    }
+    if (mode === 'rising' && lastScore > bestRising) {
+      bestRising = save.bestRising = lastScore;
+      newBest = true;
+    }
+    danger = 0;
+    refreshInfo();
+    if (msgIsCombo) clearCombo();
+    shake = fxLow ? 0 : 14;
+    endRunStats();
+    const fresh = checkSkins();
+    persist();
+    const data = mode === 'level'
+      ? { kind: 'failed', level: levelIdx, score: lastScore, target: cfg.t }
+      : { kind: 'over', mode, score: lastScore, newBest, reason: failReason, zone: zoneAt(lastScore) };
+    setTimeout(() => { showResult(data); announceSkins(fresh); }, 700);
+  }
+
+  function lavaCaught() {
+    failReason = 'lava';
+    sfx.fail();
+    buzz([60, 40, 120]);
+    fail();
+  }
+
+  function levelComplete() {
+    stopPlay();
+    const risingWasLocked = !risingUnlocked();
+    const openBefore = WORLDS.map((_, w) => worldOpen(w));
+    const ratio = perfects / cfg.t;
+    const stars = ratio >= 0.3 ? 3 : ratio >= 0.15 ? 2 : 1;
+    const prevStars = prog.stars[levelIdx] || 0;
+    prog.stars[levelIdx] = Math.max(prevStars, stars);
+    prog.unlocked = Math.max(prog.unlocked, Math.min(levelIdx + 2, LEVELS.length));
+    const risingNew = risingWasLocked && risingUnlocked();
+    const opened = WORLDS.map((_, w) => w).filter(w => !openBefore[w] && worldOpen(w));
+    endRunStats();
+    const fresh = checkSkins();
+    persist();
+
+    // Celebration: rings and sparkles on the top block, one camera impulse, restrained flash
+    const row = stack.length - 1;
+    const top = stack[row];
+    const y = rowY(row);
+    ring(top.x, top.w, row, 'rgba(255,255,255,0.95)', 0, 3, 30, 32);
+    ring(top.x, top.w, row, 'rgba(253,230,138,0.9)', 8, 3, 54, 38);
+    sparkle(top.x, top.w, y, 26, [top.sh.spark, '#ffffff', '#fde68a'], 1.6);
+    sparkle(top.x, top.w, y, 16, ['#fbbf24', '#ffffff'], 2.1);
+    if (!fxLow) {
+      flash = 0.3;
+      kick(2.2);
+    }
+    sfx.win();
+    buzz([30, 40, 60]);
+    const data = { kind: 'complete', level: levelIdx, stars, prevStars, perfects, target: cfg.t, risingNew, opened };
+    setTimeout(() => {
+      showResult(data);                                    // world / Rising unlocks are shown on the result card
+      if (opened.length || risingNew) sfx.unlock();
+      announceSkins(fresh);
+    }, 900);
+  }
+
+  function announceSkins(fresh) {
+    if (!fresh.length) return;
+    fresh.forEach(s => toast(`New skin: ${s.name}`, 'palette'));
+    sfx.unlock();
+  }
+
+  // ---------------------------------------------------------------
+  // Icons (inline SVG, drawn with currentColor)
+  // ---------------------------------------------------------------
+  const P = d => `<svg class="ic" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+  const ICON = {
+    play: P('<path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/>'),
+    pause: P('<rect x="6.5" y="5" width="3.6" height="14" rx="1.2" fill="currentColor" stroke="none"/><rect x="13.9" y="5" width="3.6" height="14" rx="1.2" fill="currentColor" stroke="none"/>'),
+    restart: P('<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4.5 4.5v4.2h4.2"/>'),
+    home: P('<path d="M4 11.2 12 4.5l8 6.7"/><path d="M6.5 10v9.5h11V10"/>'),
+    back: P('<path d="M15 5l-7 7 7 7"/>'),
+    chevR: P('<path d="M9 5l7 7-7 7"/>'),
+    gear: P('<circle cx="12" cy="12" r="3"/><path d="M12 3.2v2.4M12 18.4v2.4M20.8 12h-2.4M5.6 12H3.2M18.2 5.8l-1.7 1.7M7.5 16.5l-1.7 1.7M18.2 18.2l-1.7-1.7M7.5 7.5 5.8 5.8"/><circle cx="12" cy="12" r="6.2"/>'),
+    trophy: P('<path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4"/><path d="M12 13v4M8.5 20h7"/>'),
+    palette: P('<path d="M12 3.2a8.8 8.8 0 1 0 0 17.6c1.2 0 1.9-.8 1.9-1.7 0-1.2-1-1.5-1-2.6 0-1 .8-1.5 1.8-1.5h2.2a4 4 0 0 0 4-4C20.9 6.6 17 3.2 12 3.2z"/><circle cx="7.6" cy="11" r="1.2" fill="currentColor"/><circle cx="10" cy="7.2" r="1.2" fill="currentColor"/><circle cx="14.6" cy="7.2" r="1.2" fill="currentColor"/>'),
+    help: P('<circle cx="12" cy="12" r="8.8"/><path d="M9.6 9.6a2.5 2.5 0 1 1 3.4 2.3c-.7.3-1 .9-1 1.6"/><circle cx="12" cy="16.9" r=".7" fill="currentColor"/>'),
+    share: P('<path d="M12 3.5v11M7.8 7.7 12 3.5l4.2 4.2"/><path d="M5.5 12v7.5h13V12"/>'),
+    lock: P('<rect x="5.5" y="10.5" width="13" height="9.5" rx="2.2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>'),
+    star: '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.8l2.75 5.75 6.3.83-4.6 4.36 1.16 6.26L12 16.95 6.39 20l1.16-6.26-4.6-4.36 6.3-.83z"/></svg>',
+    sound: P('<path d="M4 9.5h3.4L12 5.6v12.8l-4.6-3.9H4z" fill="currentColor" stroke="none"/><path d="M15.4 9.2a4 4 0 0 1 0 5.6M17.9 6.6a7.6 7.6 0 0 1 0 10.8"/>'),
+    mute: P('<path d="M4 9.5h3.4L12 5.6v12.8l-4.6-3.9H4z" fill="currentColor" stroke="none"/><path d="M16 9.6l4.8 4.8M20.8 9.6 16 14.4"/>'),
+    vibe: P('<rect x="8.2" y="3.8" width="7.6" height="16.4" rx="2"/><path d="M4.8 8.5v7M19.2 8.5v7"/>'),
+    motion: P('<path d="M12 3.5v3.5M12 17v3.5M3.5 12H7M17 12h3.5M6 6l2.4 2.4M15.6 15.6 18 18M18 6l-2.4 2.4M8.4 15.6 6 18"/>'),
+    meter: P('<path d="M12 3.5v17"/><path d="M8 7.5h4M8 12h4M8 16.5h4"/><circle cx="12" cy="9.5" r="2" fill="currentColor"/>'),
+    grid: P('<rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/>'),
+    infinity: P('<path d="M6.6 15.4c-1.9 0-3.4-1.5-3.4-3.4s1.5-3.4 3.4-3.4c3.4 0 7.4 6.8 10.8 6.8 1.9 0 3.4-1.5 3.4-3.4s-1.5-3.4-3.4-3.4c-3.4 0-7.4 6.8-10.8 6.8z"/>'),
+    flame: P('<path d="M12 3c.5 3.4 5 5.4 5 10a5 5 0 0 1-10 0c0-2.5 1.5-4 2.5-5 .2 1.8 1 2.8 2 3.3C11 9 11 6 12 3z"/>'),
+    check: P('<path d="M5 12.5 9.5 17 19 7.5"/>'),
+    trash: P('<path d="M4.5 7h15M9.5 7V4.6h5V7M6.8 7l.9 12.6h8.6L17.2 7"/>'),
+    globe: P('<circle cx="12" cy="12" r="8.6"/><path d="M3.6 12h16.8M12 3.4c2.4 2.4 3.4 5.4 3.4 8.6s-1 6.2-3.4 8.6c-2.4-2.4-3.4-5.4-3.4-8.6s1-6.2 3.4-8.6z"/>'),
+    stairs: P('<path d="M4 19.5h4v-4h4v-4h4v-4h4"/>'),
+  };
+  const starRow = (n, max = 3) => Array.from({ length: max }, (_, i) => `<span class="${i < n ? '' : 'e'}">${ICON.star}</span>`).join('');
+  const ART = {
+    city: '<svg viewBox="0 0 86 64"><g fill="rgba(4,10,28,.85)"><rect x="4" y="30" width="12" height="34"/><rect x="18" y="18" width="14" height="46"/><rect x="34" y="34" width="10" height="30"/><rect x="46" y="12" width="13" height="52"/><rect x="61" y="26" width="10" height="38"/><rect x="73" y="38" width="10" height="26"/></g><g fill="rgba(255,214,150,.75)"><rect x="21" y="24" width="2" height="2"/><rect x="26" y="32" width="2" height="2"/><rect x="49" y="20" width="2" height="2"/><rect x="54" y="30" width="2" height="2"/><rect x="49" y="40" width="2" height="2"/><rect x="64" y="34" width="2" height="2"/></g></svg>',
+    desert: '<svg viewBox="0 0 86 64"><circle cx="62" cy="34" r="8" fill="rgba(255,214,160,.95)"/><path d="M14 46 26 24 38 46z" fill="rgba(60,26,52,.8)"/><path d="M0 50c14-8 26-8 40-2s30 6 46-4v20H0z" fill="rgba(110,52,60,.9)"/><path d="M0 58c18-6 34-6 50-1s26 2 36-2v9H0z" fill="rgba(170,96,74,.95)"/></svg>',
+    snow: '<svg viewBox="0 0 86 64"><path d="M0 64 20 26l12 18 16-30 22 34 16-14v30z" fill="rgba(20,46,80,.9)"/><path d="M48 14 42 26l6-3 5 4zM20 26l-5 9 5-2 4 3z" fill="rgba(240,248,255,.9)"/><path d="M0 64h86V54c-10-3-20-3-30 0s-24 3-34 0-16-1-22 1z" fill="rgba(230,240,252,.95)"/></svg>',
+    neon: '<svg viewBox="0 0 86 64"><g fill="rgba(10,2,22,.92)"><rect x="6" y="26" width="12" height="30"/><rect x="20" y="14" width="14" height="42"/><rect x="38" y="30" width="10" height="26"/><rect x="50" y="18" width="13" height="38"/><rect x="66" y="28" width="12" height="28"/></g><g fill="none" stroke-width="1.6"><path d="M20 14h14" stroke="#ec4899"/><path d="M50 18h13" stroke="#22d3ee"/><path d="M6 26h12" stroke="#facc15"/><path d="M66 28h12" stroke="#a78bfa"/></g><rect x="0" y="56" width="86" height="8" fill="rgba(236,72,153,.25)"/></svg>',
+  };
+
+  // ---------------------------------------------------------------
+  // Screens and navigation
+  // ---------------------------------------------------------------
+  const SCREENS = ['menu', 'worlds', 'levels', 'skins', 'settings', 'stats', 'howto', 'pause', 'result'];
+  const nav = [];             // stack of { name, arg }
+  const curScreen = () => (nav.length ? nav[nav.length - 1].name : 'menu');
+  let resultData = null;
+  let modalAction = null;
+  let guarded = false;        // a history entry is pushed so Android back stays inside the game
+
+  function ensureGuard() {
+    if (guarded) return;
+    try { history.pushState({ stackTower: 1 }, ''); guarded = true; } catch (e) {}
+  }
+  function paint() {
+    const top = nav[nav.length - 1] || { name: 'menu' };
+    const R = RENDER[top.name];
+    if (R) R(top.arg);
+    for (const s of SCREENS) $('scr-' + s).classList.toggle('on', s === top.name);
+    const inGame = top.name === 'game' || top.name === 'pause';
+    hudEl.classList.toggle('hidden', !inGame);
+    pauseBtn.classList.toggle('show', top.name === 'game' && running);
+    if (top.name !== 'game') zoneEl.classList.remove('on');
+  }
+  function go(name, arg) { nav.push({ name, arg }); paint(); ensureGuard(); }
+  function root(name, arg) { nav.length = 0; nav.push({ name, arg }); paint(); if (name !== 'menu') ensureGuard(); }
+  function pop() { if (nav.length > 1) { nav.pop(); paint(); } }
+
+  function handleBack() {
+    if (modalAction) { closeModal(); return; }
+    switch (curScreen()) {
+      case 'game': pauseGame(); break;
+      case 'pause': resumeGame(); break;
+      case 'result': resultBack(); break;
+      case 'menu': toast('Press back again to exit'); break;
+      default: pop();
+    }
+  }
+  function resultBack() {
+    if (resultData && resultData.kind !== 'over') openLevels(worldOf(resultData.level));
+    else showMenu();
+  }
+
+  function showMenu() {
+    stopPlay();
+    mode = 'menu';
+    cfg = { ...DEFAULT_CFG };
+    if (!worldOpen(worldIdx(save.world))) save.world = 'city';
+    skinNow = WORLDS[worldIdx(save.world)].skin;
+    setEnv(save.world);
+    resetState();
+    // a small decorative tower, lifted into the open space between the title and the Play button
+    for (let i = 1; i <= 4; i++) {
+      const p = stack[i - 1];
+      const w = Math.max(120, p.w - (i % 3 === 0 ? 10 : 0));
+      const x = Math.max(0, Math.min(GW - w, p.x + (i % 2 ? 4 : -3)));
+      stack.push(makeBlock(x, w, colorFor(i), false));
+    }
+    root('menu');
+    const r = $('mPlay').getBoundingClientRect();
+    const d = canvas.height / Math.max(1, innerHeight);
+    menuCam = Math.min(0, ((r.top - 26) * d - oy) / scale - GROUND);
+    camDown = menuCam;
+  }
+  function openLevels(w) {
+    save.world = WORLDS[w].id;
+    persist();
+    if (mode === 'menu' || !running) { skinNow = WORLDS[w].skin; setEnv(WORLDS[w].id); }
+    nav.length = 0;
+    nav.push({ name: 'menu' }, { name: 'worlds' });
+    go('levels', w);
+  }
+
+  function pauseGame() {
+    if (!running || paused) return;
+    paused = true;
+    go('pause');
+  }
+  function resumeGame() {
+    if (!paused) return;
+    paused = false;
+    while (nav.length > 1 && curScreen() !== 'game') nav.pop();
+    paint();
+    lastT = performance.now();
+  }
+
+  // --- toast + modal ---------------------------------------------------
+  function toast(text, icon = 'star') {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.innerHTML = `${ICON[icon] || ''}<span></span>`;
+    t.querySelector('span').textContent = text;
+    $('toasts').appendChild(t);
+    setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 260); }, 2600);
+  }
+  function confirmBox(title, text, okLabel, onOk, danger = false) {
+    modalAction = onOk;
+    const m = $('modal');
+    m.innerHTML = `<div class="card mcard"><h3></h3><p></p>
+      <div class="rrow"><button class="btn" data-act="m-cancel" id="mCancel">Cancel</button>
+      <button class="btn ${danger ? 'btn-danger' : 'btn-primary'}" data-act="m-ok" id="mOk"></button></div></div>`;
+    m.querySelector('h3').textContent = title;
+    m.querySelector('p').textContent = text;
+    m.querySelector('#mOk').textContent = okLabel;
+    m.classList.add('on');
+    ensureGuard();
+  }
+  function closeModal() { modalAction = null; $('modal').classList.remove('on'); }
+
+  // --- screen renderers ------------------------------------------------
+  function playTarget() {
+    const i = Math.min(prog.unlocked, LEVELS.length) - 1;
+    const w = worldOf(i);
+    if (levelOpen(i)) return { i, open: true, label: `Level ${i + 1} · ${WORLDS[w].name}` };
+    return { i, open: false, label: `${WORLDS[w].need} ★ opens ${WORLDS[w].name}` };
+  }
+  const RENDER = {
+    game() {},
+    menu() {
+      const w = WORLDS[worldIdx(save.world)];
+      const p = playTarget();
+      const rising = risingUnlocked();
+      const openCount = WORLDS.filter((_, i) => worldOpen(i)).length;
+      const canCycle = openCount > 1;
+      const newSkins = save.skins.length > (save.seenSkins || 1);
+      $('scr-menu').innerHTML = `<div class="wrap">
+        <div class="topbar">
+          <span class="chip" id="mStars">${ICON.star}<b>${totalStars()}</b><i>/ ${LEVELS.length * 3}</i></span>
+          <span class="grow"></span>
+          <button class="ib" data-act="stats" id="mStats" aria-label="Stats">${ICON.trophy}</button>
+          <button class="ib" data-act="settings" id="mSettings" aria-label="Settings">${ICON.gear}</button>
+        </div>
+        <div class="logo"><div class="logo-blocks"><i></i><i></i><i></i></div><h1>STACK<span>TOWER</span></h1></div>
+        <div class="loc">
+          <button class="ib sm" data-act="loc-prev" id="mLocPrev" aria-label="Previous location" ${canCycle ? '' : 'disabled'}>${ICON.back}</button>
+          <div class="loc-name"><small>Location</small><b id="mLoc">${w.name}</b></div>
+          <button class="ib sm" data-act="loc-next" id="mLocNext" aria-label="Next location" ${canCycle ? '' : 'disabled'}>${ICON.chevR}</button>
+        </div>
+        <div class="grow"></div>
+        <button class="btn btn-primary btn-xl" data-act="play" id="mPlay">${ICON.play}<span class="stack"><b>Play</b><small>${p.label}</small></span></button>
+        <div class="modes">
+          <button class="mode" data-act="levels" id="mLevels">${ICON.grid}<b>Levels</b><small>${openCount}/${WORLDS.length} worlds</small></button>
+          <button class="mode" data-act="endless" id="mEndless">${ICON.infinity}<b>Endless</b><small>Best ${save.best}</small></button>
+          <button class="mode ${rising ? '' : 'locked'}" data-act="rising" id="mRising">${rising ? ICON.flame : ICON.lock}<b>Rising</b><small>${rising ? 'Best ' + save.bestRising : 'Clear Level ' + RISE.unlockAfterLevel}</small></button>
+        </div>
+        <div class="bottomrow">
+          <button class="pillbtn" data-act="skins" id="mSkins">${ICON.palette}<span>Skins</span>${newSkins ? '<i class="dot"></i>' : ''}</button>
+          <button class="pillbtn" data-act="howto" id="mHowto">${ICON.help}<span>How to play</span></button>
+        </div>
+      </div>`;
+    },
+    worlds() {
+      const ts = totalStars();
+      $('scr-worlds').innerHTML = `<div class="wrap">
+        <div class="hdr"><button class="ib" data-act="back" aria-label="Back">${ICON.back}</button><h2>Worlds</h2><span class="chip">${ICON.star}<b>${ts}</b></span></div>
+        <div class="worlds">${WORLDS.map((w, i) => {
+          const open = worldOpen(i), ws = worldStars(i);
+          return `<button class="world ${open ? '' : 'locked'}" data-act="world" data-w="${i}" id="w${i}" style="--a:${w.a};--b:${w.b}">
+            <div class="thumb">${ART[w.id]}</div>
+            <div class="wtxt"><b>${w.name}</b><small>${w.sub}</small>
+              <div class="bar"><i style="width:${Math.round(ws / (LPW * 3) * 100)}%"></i></div>
+              <span class="wmeta">${open ? `${ICON.star}${ws} / ${LPW * 3}` : `${ICON.lock}${worldLockText(i)}`}</span></div>
+            ${open ? ICON.chevR : ''}
+          </button>`;
+        }).join('')}</div>
+        <p class="note">Earn ★ in each level to open the next world. 30% Perfect drops = 3 ★.</p>
+      </div>`;
+    },
+    levels(w) {
+      const W0 = WORLDS[w];
+      const next = playTarget().i;
+      $('scr-levels').innerHTML = `<div class="wrap">
+        <div class="hdr"><button class="ib" data-act="back" aria-label="Back">${ICON.back}</button><h2>${W0.name}</h2><span class="chip">${ICON.star}<b>${worldStars(w)}</b><i>/ ${LPW * 3}</i></span></div>
+        <div class="lvls">${Array.from({ length: LPW }, (_, k) => {
+          const i = w * LPW + k, open = levelOpen(i), c = { ...DEFAULT_CFG, ...LEVELS[i] };
+          if (!open) return `<button class="lvl locked" data-act="level" data-l="${i}" id="l${i}" aria-label="Level ${i + 1} locked">${ICON.lock}<span class="tw">Level ${i + 1}</span></button>`;
+          return `<button class="lvl ${i === next ? 'next' : ''}" data-act="level" data-l="${i}" id="l${i}" aria-label="Level ${i + 1}">
+            <span class="n">${i + 1}</span><span class="st">${starRow(prog.stars[i] || 0)}</span><span class="tw">${twistShort(c)} · ${c.t}</span></button>`;
+        }).join('')}</div>
+        <p class="note">Stack to the gold line to clear a level.</p>
+      </div>`;
+    },
+    skins() {
+      save.seenSkins = save.skins.length;
+      persist();
+      $('scr-skins').innerHTML = `<div class="wrap">
+        <div class="hdr"><button class="ib" data-act="back" aria-label="Back">${ICON.back}</button><h2>Skins</h2><span class="chip">${save.skins.length} / ${SKINS.length}</span></div>
+        <div class="skins">${SKINS.map(s => {
+          const own = save.skins.includes(s.id), eq = save.skin === s.id;
+          const p = skinReqProgress(s);
+          const status = eq ? `${ICON.check}Equipped` : own ? 'Tap to equip'
+            : `${ICON.lock}${s.req.text}${p.max > 1 ? ` (${p.cur}/${p.max})` : ''}`;
+          return `<button class="skin ${eq ? 'eq' : ''} ${own ? '' : 'locked'}" data-act="equip" data-s="${s.id}" id="s-${s.id}">
+            <canvas data-skin="${s.id}" width="240" height="168"></canvas><b>${s.name}</b><small>${status}</small></button>`;
+        }).join('')}</div>
+        <p class="note">Skins are used in Endless and Rising. Each world in Levels has its own look.</p>
+      </div>`;
+      $('scr-skins').querySelectorAll('canvas[data-skin]').forEach(cv => drawSkinPreview(cv, SKIN_BY[cv.dataset.skin]));
+    },
+    settings() {
+      const sw = (id, act, on, disabled = false) => `<button class="switch" role="switch" id="${id}" data-act="${act}" aria-checked="${on}" ${disabled ? 'disabled' : ''}><i></i></button>`;
+      $('scr-settings').innerHTML = `<div class="wrap">
+        <div class="hdr"><button class="ib" data-act="back" aria-label="Back">${ICON.back}</button><h2>Settings</h2></div>
+        <div class="card group">
+          <div class="row">${ICON.sound}<span class="lbl"><b>Sound effects</b><small>Drops, Perfects and menu clicks</small></span>${sw('tSound', 'tg-sound', soundOn)}</div>
+          <div class="row">${ICON.vibe}<span class="lbl"><b>Vibration</b><small>${canVibrate ? 'Short taps on Perfects and combos' : 'Not supported on this device'}</small></span>${sw('tVibe', 'tg-vibe', vibeOn && canVibrate, !canVibrate)}</div>
+          <div class="row">${ICON.motion}<span class="lbl"><b>Reduced motion</b><small>No shake or flashes, fewer particles</small></span>${sw('tMotion', 'tg-motion', fxLow)}</div>
+          <div class="row">${ICON.meter}<span class="lbl"><b>Height meter</b><small>The thin progress line on the left</small></span>${sw('tMeter', 'tg-meter', save.settings.meter)}</div>
+        </div>
+        <div class="card group">
+          <button class="row" data-act="howto" id="sHowto">${ICON.help}<span class="lbl"><b>How to play</b></span>${ICON.chevR}</button>
+          <button class="row danger" data-act="reset" id="sReset">${ICON.trash}<span class="lbl"><b>Reset progress</b><small>Stars, levels, skins and best scores</small></span></button>
+        </div>
+        <p class="note">Stack Tower 1.0 · Works offline · Your progress stays on this device</p>
+      </div>`;
+    },
+    stats() {
+      const st = save.stats;
+      const tile = (k, v) => `<div class="card stat"><small>${k}</small><b>${v}</b></div>`;
+      $('scr-stats').innerHTML = `<div class="wrap">
+        <div class="hdr"><button class="ib" data-act="back" aria-label="Back">${ICON.back}</button><h2>Stats</h2></div>
+        <div class="stats">
+          ${tile('Stars', `${totalStars()} / ${LEVELS.length * 3}`)}
+          ${tile('Levels cleared', prog.stars.filter(Boolean).length + ' / ' + LEVELS.length)}
+          ${tile('Best Endless', save.best)}
+          ${tile('Best Rising', save.bestRising)}
+          ${tile('Highest climb', fmtAlt(altMeters(st.maxAlt)))}
+          ${tile('Best combo', 'x' + st.bestCombo)}
+          ${tile('Perfect drops', st.perfects)}
+          ${tile('Blocks placed', st.blocks)}
+          ${tile('Games played', st.games)}
+          ${tile('Skins', save.skins.length + ' / ' + SKINS.length)}
+        </div>
+      </div>`;
+    },
+    howto(arg) {
+      const then = arg && arg.then;
+      $('scr-howto').innerHTML = `<div class="wrap">
+        <div class="hdr"><button class="ib" data-act="back" aria-label="Back">${ICON.back}</button><h2>How to play</h2></div>
+        <div class="card"><div class="demo"><div class="d-base"></div><div class="d-move"></div><div class="d-tap">👆</div></div></div>
+        <div class="steps">
+          <div class="card step"><span class="num">1</span><p><b>Tap anywhere</b> to drop the moving block onto the tower.</p></div>
+          <div class="card step"><span class="num">2</span><p>Whatever hangs over the edge is <b>cut off</b>. Line it up exactly for a <b>Perfect</b>. Three in a row make the block a little wider.</p></div>
+          <div class="card step"><span class="num">3</span><p><b>Levels:</b> reach the gold line; Perfects earn ★ that open new worlds. <b>Endless:</b> climb past the clouds into space. <b>Rising:</b> outrun the lava, Perfects push it back.</p></div>
+        </div>
+        <div class="grow"></div>
+        <button class="btn btn-primary btn-xl" data-act="${then ? 'howto-go' : 'back'}" id="hGo">${then ? `${ICON.play}Let's go` : 'Got it'}</button>
+      </div>`;
+    },
+    pause() {
+      const label = mode === 'level' ? `Level ${levelIdx + 1} · ${WORLDS[worldOf(levelIdx)].name}` : mode === 'rising' ? 'Rising' : 'Endless';
+      $('scr-pause').innerHTML = `<div class="wrap"><div class="center">
+        <h2 class="ttl">Paused</h2><p class="sub">${label} · height ${score()}</p>
+        <button class="btn btn-primary btn-xl" data-act="resume" id="resume">${ICON.play}Resume</button>
+        <button class="btn" data-act="restart" id="restart">${ICON.restart}Restart</button>
+        <button class="btn" data-act="settings" id="pSettings">${ICON.gear}Settings</button>
+        <button class="btn" data-act="quit" id="home">${ICON.home}Quit to menu</button>
+        <div class="quick">
+          <button class="ib ${soundOn ? '' : 'off'}" data-act="q-sound" id="soundBtn" aria-label="Sound">${soundOn ? ICON.sound : ICON.mute}</button>
+          <button class="ib ${vibeOn ? '' : 'off'}" data-act="q-vibe" id="vibeBtn" aria-label="Vibration" ${canVibrate ? '' : 'disabled'}>${ICON.vibe}</button>
+          <button class="ib ${fxLow ? 'off' : ''}" data-act="q-motion" id="fxBtn" aria-label="Effects">${ICON.motion}</button>
+        </div>
+      </div></div>`;
+    },
+    result(d) {
+      d = d || resultData;
+      const el = $('scr-result');
+      if (!d) { el.innerHTML = ''; return; }
+      if (d.kind === 'complete') {
+        const i = d.level, w = worldOf(i);
+        const last = i === LEVELS.length - 1;
+        const nextOpen = !last && levelOpen(i + 1);
+        const notes = [];
+        if (d.stars > d.prevStars && d.prevStars > 0) notes.push(`<div class="hi">New record: ${d.stars} ★</div>`);
+        d.opened.forEach(o => notes.push(`<div class="hi">🌍 ${WORLDS[o].name} unlocked!</div>`));
+        if (d.risingNew) notes.push('<div class="hi">🔥 Rising mode unlocked!</div>');
+        if (!last && !nextOpen && worldOf(i + 1) !== w) notes.push(`<div>${WORLDS[w + 1].need} ★ opens ${WORLDS[w + 1].name} · you have ${totalStars()} ★</div>`);
+        if (d.stars < 3) notes.push('<div>More Perfects = more ★</div>');
+        const primary = last ? `<button class="btn btn-primary btn-xl" data-act="r-endless" id="rPrimary">${ICON.infinity}Play Endless</button>`
+          : nextOpen ? `<button class="btn btn-primary btn-xl" data-act="r-next" id="rPrimary">Next level ${ICON.chevR}</button>`
+          : `<button class="btn btn-primary btn-xl" data-act="r-levels" id="rPrimary">${ICON.star}Earn more ★</button>`;
+        el.innerHTML = `<div class="wrap"><div class="center">
+          <p class="sub">${WORLDS[w].name}</p><h2 class="ttl" id="title">Level ${i + 1} complete!</h2>
+          <div class="rstars">${[0, 1, 2].map(k => `<span class="${k < d.stars ? 'on' : ''}">${ICON.star}</span>`).join('')}</div>
+          <p class="sub" id="sub">Perfect drops ${d.perfects} / ${d.target}</p>
+          <div class="notes">${notes.join('')}</div>
+          ${primary}
+          <div class="rrow"><button class="btn" data-act="r-retry" id="rRetry">${ICON.restart}Replay</button><button class="btn" data-act="r-levels" id="rLevels">${ICON.grid}Levels</button></div>
+        </div></div>`;
+      } else if (d.kind === 'failed') {
+        const pct = Math.round(Math.min(1, d.score / d.target) * 100);
+        el.innerHTML = `<div class="wrap"><div class="center">
+          <p class="sub">Level ${d.level + 1} · ${WORLDS[worldOf(d.level)].name}</p><h2 class="ttl" id="title">So close!</h2>
+          <div class="bigscore">${d.score}<span style="font-size:28px;color:var(--dim)"> / ${d.target}</span></div>
+          <div class="prog2"><i style="width:${pct}%"></i></div>
+          <p class="sub" id="sub">${d.score}/${d.target}</p>
+          <button class="btn btn-primary btn-xl" data-act="r-retry" id="rPrimary">${ICON.restart}Retry</button>
+          <div class="rrow"><button class="btn" data-act="r-levels" id="rLevels">${ICON.grid}Levels</button><button class="btn" data-act="r-home" id="rHome">${ICON.home}Menu</button></div>
+        </div></div>`;
+      } else {
+        const rising = d.mode === 'rising';
+        const bestV = rising ? save.bestRising : save.best;
+        const Z = ZONES[d.zone];
+        const zname = d.zone === 0 ? WORLDS[worldIdx(save.world)].name : (Z.name || ENVS[envId].lowName);
+        el.innerHTML = `<div class="wrap"><div class="center">
+          <p class="sub">${rising ? 'Rising' : 'Endless'} · ${WORLDS[worldIdx(save.world)].name}</p>
+          <h2 class="ttl" id="title">${rising && d.reason === 'lava' ? 'The lava got you!' : 'Game Over'}</h2>
+          <div class="bigscore">${d.score}</div>
+          ${d.newBest ? '<span class="badge">NEW BEST</span>' : ''}
+          <p class="sub" id="sub">${d.newBest ? '' : `Best ${bestV} · `}${Z.icon} ${zname} · ${fmtAlt(altMeters(d.score))}</p>
+          <button class="btn btn-primary btn-xl" data-act="r-again" id="rPrimary">${ICON.restart}Play again</button>
+          <div class="rrow"><button class="btn" data-act="r-share" id="rShare">${ICON.share}Share</button><button class="btn" data-act="r-home" id="rHome">${ICON.home}Menu</button></div>
+        </div></div>`;
+      }
+    }
+  };
+
+  function showResult(d) {
+    resultData = d;
+    root('result', d);
+  }
+
+  // Small stack of blocks in a skin, for the skins screen (reuses the real block renderer)
+  function drawSkinPreview(cv, skin) {
+    const g = cv.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, cv.width, cv.height);
+    const k = cv.height / (BH * 4 + DY + 14);
+    g.setTransform(k, 0, 0, k, cv.width / 2 - (110 * k) / 2 - DX * k / 2, 0);
+    const widths = [110, 110, 104, 110], xs = [0, 0, 4, -2];
+    for (let i = 0; i < 4; i++) {
+      const c = colorForSkin(skin, i);
+      const y = DY + 6 + (3 - i) * BH;
+      drawBlock3D(xs[i], y, widths[i], shades(c), 1, 1, 0, false, g);
+    }
+  }
+
+  async function share() {
+    const text = mode === 'rising'
+      ? `I climbed ${lastScore} blocks above the lava in Stack Tower! Can you beat me?`
+      : `I stacked ${lastScore} blocks (${fmtAlt(altMeters(lastScore))}) in Stack Tower! Can you beat me?`;
+    try {
+      if (navigator.share) await navigator.share({ text });
+      else { await navigator.clipboard.writeText(text); toast('Score copied!', 'check'); }
+    } catch (e) {}
+  }
+
+  function setSetting(key, val) {
+    save.settings[key] = val;
+    if (key === 'sound') soundOn = val;
+    if (key === 'vibe') vibeOn = val;
+    if (key === 'reducedFx') { fxLow = val; if (val) { camY = 0; camV = 0; shake = 0; flash = 0; } }
+    persist();
+    const top = curScreen();
+    if (top === 'settings' || top === 'pause') paint();
+  }
+
+  // --- actions ---------------------------------------------------------
+  function withHowTo(fn, then) {
+    if (save.seenHowTo) { fn(); return; }
+    pendingStart = fn;
+    go('howto', { then });
+  }
+  let pendingStart = null;
+
+  function act(a, el) {
+    switch (a) {
+      case 'back': handleBack(); break;
+      case 'pause': pauseGame(); break;
+      case 'play': {
+        const p = playTarget();
+        if (p.open) withHowTo(() => startLevel(p.i), 'level');
+        else { openLevels(worldOf(p.i) - 1); toast(p.label, 'star'); }
+        break;
+      }
+      case 'levels': go('worlds'); break;
+      case 'endless': withHowTo(startEndless, 'endless'); break;
+      case 'rising':
+        if (risingUnlocked()) withHowTo(startRising, 'rising');
+        else toast(`Clear Level ${RISE.unlockAfterLevel} to unlock Rising`, 'lock');
+        break;
+      case 'skins': go('skins'); break;
+      case 'stats': go('stats'); break;
+      case 'settings': go('settings'); break;
+      case 'howto': go('howto'); break;
+      case 'howto-go': {
+        save.seenHowTo = true;
+        persist();
+        const fn = pendingStart;
+        pendingStart = null;
+        if (fn) fn(); else pop();
+        break;
+      }
+      case 'loc-prev': case 'loc-next': {
+        const open = WORLDS.map((_, i) => i).filter(i => worldOpen(i));
+        const k = open.indexOf(worldIdx(save.world));
+        const n = open[(k + (a === 'loc-next' ? 1 : open.length - 1)) % open.length];
+        save.world = WORLDS[n].id;
+        persist();
+        showMenu();
+        break;
+      }
+      case 'world': {
+        const w = +el.dataset.w;
+        if (worldOpen(w)) openLevels(w);
+        else toast(worldLockText(w), 'lock');
+        break;
+      }
+      case 'level': {
+        const i = +el.dataset.l;
+        if (levelOpen(i)) withHowTo(() => startLevel(i), 'level');
+        else toast(worldOpen(worldOf(i)) ? `Clear Level ${i} first` : worldLockText(worldOf(i)), 'lock');
+        break;
+      }
+      case 'equip': {
+        const id = el.dataset.s;
+        if (!save.skins.includes(id)) { toast(SKIN_BY[id].req.text, 'lock'); break; }
+        save.skin = id;
+        persist();
+        paint();
+        toast(`${SKIN_BY[id].name} equipped`, 'check');
+        break;
+      }
+      case 'tg-sound': setSetting('sound', !soundOn); if (soundOn) { ensureAudio(); sfx.ui(); } break;
+      case 'tg-vibe': setSetting('vibe', !vibeOn); buzz(15); break;
+      case 'tg-motion': setSetting('reducedFx', !fxLow); break;
+      case 'tg-meter': setSetting('meter', !save.settings.meter); break;
+      case 'q-sound': setSetting('sound', !soundOn); if (soundOn) { ensureAudio(); sfx.tap(); } break;
+      case 'q-vibe': setSetting('vibe', !vibeOn); buzz(15); break;
+      case 'q-motion': setSetting('reducedFx', !fxLow); break;
+      case 'reset':
+        confirmBox('Reset all progress?', 'Stars, unlocked levels and worlds, skins, best scores and stats will be erased. Settings stay as they are.', 'Reset', () => {
+          const keep = save.settings;
+          save = defaultSave();
+          save.settings = keep;
+          save.seenHowTo = true;
+          prog = save.prog;
+          best = 0; bestRising = 0;
+          persist();
+          toast('Progress reset', 'check');
+          showMenu();
+        }, true);
+        break;
+      case 'm-ok': { const f = modalAction; closeModal(); if (f) f(); break; }
+      case 'm-cancel': closeModal(); break;
+      case 'resume': resumeGame(); break;
+      case 'restart': paused = false; restart(); break;
+      case 'quit':
+        confirmBox('Quit this run?', 'Your current tower will be lost.', 'Quit', () => { paused = false; endRunStats(); persist(); showMenu(); });
+        break;
+      case 'r-next': startLevel(resultData.level + 1); break;
+      case 'r-retry': startLevel(resultData.level); break;
+      case 'r-levels': openLevels(worldOf(resultData.level)); break;
+      case 'r-endless': startEndless(); break;
+      case 'r-again': if (resultData.mode === 'rising') startRising(); else startEndless(); break;
+      case 'r-home': showMenu(); break;
+      case 'r-share': share(); break;
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Input
+  // ---------------------------------------------------------------
+  document.addEventListener('click', e => {
+    const el = e.target instanceof Element ? e.target.closest('[data-act]') : null;
+    if (!el || el.disabled) return;
+    if (el.dataset.act !== 'pause') sfx.ui();
+    act(el.dataset.act, el);
+  });
+  addEventListener('pointerdown', e => {
+    ensureAudio();
+    if (e.target instanceof Element && e.target.closest('button, .screen.on, #modal.on')) return;  // UI handles its own taps
+    if (curScreen() !== 'game' || !running || paused) return;
+    e.preventDefault();
+    drop();
+  });
+  addEventListener('keydown', e => {
+    if (e.code === 'Escape' || e.code === 'KeyP') {
+      if (e.code === 'KeyP' && curScreen() !== 'game' && curScreen() !== 'pause') return;
+      e.preventDefault();
+      if (curScreen() !== 'menu') handleBack();
+    } else if (e.code === 'Space' && curScreen() === 'game' && running && !paused) {
+      e.preventDefault();
+      drop();
+    }
+  });
+  // Android back button (or browser back) walks back through the screens
+  addEventListener('popstate', () => {
+    guarded = false;
+    handleBack();
+    if (curScreen() !== 'menu' || modalAction) ensureGuard();
+  });
+  // Pause automatically when the app goes to the background
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pauseGame(); });
+
+  // ---------------------------------------------------------------
+  // Update
+  // ---------------------------------------------------------------
+  function update(dt) {
+    if (paused) return;
+    time += dt;
+    alt += (score() - alt) * Math.min(1, 0.06 * dt);
+    meterPulse *= Math.pow(0.93, dt);
+    if (sweep.on) { sweep.t += dt; if (sweep.t >= 42) sweep.on = false; }
+
+    if (running) {
+      let speed = mode === 'level'
+        ? cfg.speed + Math.floor(score() / 5) * 0.12
+        : Math.min(2.2 + Math.floor(score() / 10) * 0.4, 6.5);
+      if (cfg.wobble) {
+        wobT += 0.05 * dt;
+        speed *= 1 + 0.55 * Math.sin(wobT);
+      }
+      mx += dir * speed * dt;
+      if (mx < 0) { mx = 0; dir = 1; }
+      if (mx + mw > GW) { mx = GW - mw; dir = -1; }
+
+      if (mode === 'rising') {
+        lavaClock += dt / 60;
+        const wasFrozen = lavaFreeze > 0;
+        if (lavaFreeze > 0) {
+          lavaFreeze = Math.max(0, lavaFreeze - dt);
+        } else if (lavaClock > RISE.delay) {
+          const rate = Math.min(RISE.rate + (lavaClock - RISE.delay) * RISE.accel, RISE.maxRate);
+          lava += rate * dt / 60;
+        }
+        if (wasFrozen !== (lavaFreeze > 0)) refreshInfo();
+        const gap = stack.length - lava;                  // rows of tower still above the lava
+        danger = lavaClock <= RISE.delay ? 0 : Math.max(0, Math.min(1, 1 - (gap - RISE.loseGap) / RISE.dangerRows));
+        if (danger > 0.25) {
+          beatTimer -= dt;
+          if (beatTimer <= 0) {
+            sfx.heart();
+            beatPulse = 1;
+            beatTimer = 60 * (1.0 - danger * 0.55);       // faster as it gets closer
+          }
+        } else {
+          beatTimer = 0;
+        }
+        if (Math.random() < 0.25 * dt) {                  // embers drifting up from the surface
+          emit(Math.random() * (GW + DX), GROUND - lava * BH + camDown, (Math.random() - 0.5) * 0.4, -0.5 - Math.random() * 0.8,
+            30 + Math.random() * 20, 1.4 + Math.random() * 1.6, Math.random() < 0.5 ? '#fdba74' : '#fb923c', -0.004, 0.99, 0);
+        }
+        if (gap <= RISE.loseGap) { lavaCaught(); return; }
+      }
+    }
+    beatPulse *= Math.pow(0.88, dt);
+    lavaFlash *= Math.pow(0.88, dt);
+
+    // Scroll the camera once the tower gets tall
+    const camTarget = mode === 'menu' ? menuCam : Math.max(0, stack.length - 11) * BH;
+    camDown += (camTarget - camDown) * Math.min(1, 0.12 * dt);
+
+    // Camera impulse spring: small push that settles in under 0.5 s
+    camV += -camY * 0.28 * dt;
+    camV *= Math.pow(0.66, dt);
+    camY += camV * dt;
+    if (Math.abs(camY) < 0.01 && Math.abs(camV) < 0.01) { camY = 0; camV = 0; }
+
+    for (let i = Math.max(0, stack.length - 3); i < stack.length; i++) {
+      const b = stack[i];
+      if (b.t < 999) b.t += dt;
+      if (b.glow > 0) { b.glow *= Math.pow(0.86, dt); if (b.glow < 0.01) b.glow = 0; }
+    }
+
+    for (const d of debris) {
+      d.vy += 0.45 * dt;
+      d.vx *= Math.pow(0.995, dt);
+      d.x += d.vx * dt;
+      d.y += d.vy * dt;
+      d.ang += d.va * Math.min(1, d.age / 10) * dt;
+      d.age += dt;
+    }
+    debris = debris.filter(d => d.age < 60 && d.y < GH + 100);
+
+    for (const p of pool) {
+      if (!p.on) continue;
+      p.vy += p.g * dt;
+      const drag = Math.pow(p.d, dt);
+      p.vx *= drag;
+      p.vy *= drag;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.life -= dt;
+      if (p.life <= 0) p.on = false;
+    }
+    for (const r of rings) { if (r.on) { r.t += dt; if (r.t >= r.max) r.on = false; } }
+    for (const g of glows) { if (g.on) { g.t += dt; if (g.t >= g.max) g.on = false; } }
+
+    // Fly-bys: new ones arrive from above as the tower climbs, a few cross the sky over time
+    const W = canvas.width, H = canvas.height;
+    const camPx = Math.round(camDown * scale);
+    const zone = zoneAt(alt);
+    if (camPx >= flyNext) {
+      spawnFly(zone, true);
+      flyNext = camPx + H * (0.22 + Math.random() * 0.33);   // something passes every few blocks
+    }
+    flyTimer -= dt;
+    if (flyTimer <= 0) {
+      if (flys.filter(f => f.on).length < 3) spawnFly(zone, false);
+      flyTimer = 60 * (4 + Math.random() * 6);
+    }
+    for (const f of flys) {
+      if (!f.on) continue;
+      f.t += dt;
+      f.x += f.vx * dt;
+      const y = f.y0 + (camPx - f.cam0) * f.f;
+      if (f.x < -200 * scale || f.x > W + 200 * scale || y > H + 120 || (f.type === 'shoot' && f.t > 40)) f.on = false;
+    }
+
+    shake *= Math.pow(0.88, dt);
+    if (shake < 0.1) shake = 0;
+    flash *= Math.pow(0.9, dt);
+    if (flash < 0.01) flash = 0;
+
+    if (msgTimer > 0) {
+      msgTimer -= dt;
+      if (msgTimer <= 0) msgEl.classList.remove('show');
+    }
+  }
+
+  // ---------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------
+  function topPath(g, w) {
+    g.beginPath();
+    g.moveTo(0, 0); g.lineTo(w, 0); g.lineTo(w + DX, -DY); g.lineTo(DX, -DY);
+    g.closePath();
+  }
+  // One block in oblique 3D. Local origin = top-left of the front face (the gameplay rectangle).
+  // sx/sy squash around the bottom-centre for the settle animation (visual only).
+  function drawBlock3D(x, y, w, sh, sx = 1, sy = 1, glow = 0, gold = false, g = ctx) {
+    g.save();
+    if (sx !== 1 || sy !== 1) {
+      g.translate(x + w / 2, y + BH);
+      g.scale(sx, sy);
+      g.translate(-w / 2, -BH);
+    } else {
+      g.translate(x, y);
+    }
+    g.fillStyle = sh.side;                                  // right side face: away from the light
+    g.beginPath();
+    g.moveTo(w, 0); g.lineTo(w + DX, -DY); g.lineTo(w + DX, BH - DY); g.lineTo(w, BH);
+    g.closePath();
+    g.fill();
+    g.fillStyle = sh.top;                                   // top face: brightest
+    topPath(g, w);
+    g.fill();
+    g.fillStyle = sh.front;
+    g.fillRect(0, 0, w, BH);
+    if (sh.mat === 'sand') {                                // matte stone with strata
+      g.fillStyle = sh.edge;
+      g.fillRect(0, 0, w, 1);
+      g.fillStyle = sh.strata;
+      g.fillRect(0, BH * 0.36, w, 1);
+      g.fillRect(0, BH * 0.7, w, 1);
+      g.fillStyle = sh.strata2;
+      g.fillRect(0, BH * 0.36 + 1, w, 1);
+      g.fillRect(0, BH * 0.7 + 1, w, 1);
+      g.fillStyle = 'rgba(0,0,0,0.18)';
+      g.fillRect(0, BH - 1.5, w, 1.5);
+    } else if (sh.mat === 'ice') {                          // translucent, frosted edges, a glint
+      g.fillStyle = sh.glint;
+      const gx = Math.min(w * 0.18, 30);
+      g.beginPath();
+      g.moveTo(gx, 0); g.lineTo(gx + 9, 0); g.lineTo(gx + 9 - BH * 0.45, BH); g.lineTo(gx - BH * 0.45, BH);
+      g.closePath();
+      g.fill();
+      g.fillStyle = sh.edge;
+      g.fillRect(0, 0, w, 1.3);
+      g.fillStyle = sh.frost;
+      g.fillRect(0, 1.3, 1.4, BH - 1.3);
+      g.fillRect(0, BH - 1.2, w, 1.2);
+    } else if (sh.mat === 'neon') {                         // dark glass with a glowing outline
+      g.strokeStyle = sh.glowLine;
+      g.lineWidth = 3.2;
+      g.strokeRect(1, 1, w - 2, BH - 2);
+      g.strokeStyle = sh.edge;
+      g.lineWidth = 1.2;
+      g.strokeRect(0.6, 0.6, w - 1.2, BH - 1.2);
+      topPath(g, w);
+      g.lineWidth = 1;
+      g.stroke();
+      g.fillStyle = sh.inner;
+      g.fillRect(3, BH * 0.5, w - 6, 1);
+    } else {                                                // gloss: thin chamfer highlights
+      g.fillStyle = sh.edge;
+      g.fillRect(0, 0, w, 1.2);
+      g.fillStyle = 'rgba(255,255,255,0.13)';
+      g.fillRect(0, 1.2, 1.2, BH - 1.2);
+      g.fillStyle = 'rgba(255,255,255,0.09)';
+      g.fillRect(w - 1, 0, 1, BH);
+      g.fillStyle = 'rgba(0,0,0,0.2)';
+      g.fillRect(0, BH - 1.5, w, 1.5);
+    }
+    if (gold) {
+      g.strokeStyle = 'rgba(255,255,255,0.8)';
+      g.lineWidth = 1.3;
+      g.strokeRect(0.65, 0.65, w - 1.3, BH - 1.3);
+    }
+    if (glow > 0) {
+      g.fillStyle = `rgba(255,255,255,${glow * 0.5})`;
+      g.fillRect(0, 0, w, BH);
+      topPath(g, w);
+      g.fill();
+    }
+    g.restore();
+  }
+
+  function drawPlaced(b, y) {
+    let sx = 1, sy = 1;
+    if (b.t < 45 && b.amp) {                               // squash-and-settle, visual only
+      const s = b.amp * Math.exp(-b.t / 7) * Math.cos(b.t * 0.55);
+      sy = 1 - s;
+      sx = 1 + s * 0.35;
+    }
+    drawBlock3D(b.x, y, b.w, b.sh, sx, sy, b.glow, b.gold);
+  }
+
+  // Fake soft shadow on the exposed ledge of the lower block's top face (no real-time shadows)
+  function castShadow(lower, y, ux, uw) {
+    const xr = ux + uw;
+    const room = lower.x + lower.w - xr;
+    if (room <= 0.5 || xr < lower.x) return;
+    const strip = (s, color) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(xr, y); ctx.lineTo(xr + s, y); ctx.lineTo(xr + s + DX, y - DY); ctx.lineTo(xr + DX, y - DY);
+      ctx.closePath();
+      ctx.fill();
+    };
+    strip(Math.min(8, room), lower.sh.shadowSoft);
+    strip(Math.min(3, room), lower.sh.shadowHard);
+  }
+
+  function meterMarks() {
+    if (mode === 'level') return { max: cfg.t, marks: [{ at: cfg.t, icon: '🏁' }] };
+    return { max: CITY.meterMax, marks: ZONES.slice(1).map(z => ({ at: z.at, icon: z.icon })) };
+  }
+  function drawMeter(W, H) {
+    const d = H / Math.max(1, innerHeight);
+    const x = 9 * d, y0 = H * 0.76, y1 = H * 0.26;
+    const { max, marks } = meterMarks();
+    const yAt = v => y0 + (y1 - y0) * Math.min(1, v / max);
+    ctx.fillStyle = 'rgba(255,255,255,0.13)';
+    ctx.fillRect(x - d, y1, 2 * d, y0 - y1);
+    ctx.font = `${Math.round(11 * d)}px system-ui, sans-serif`;
+    ctx.textBaseline = 'middle';
+    for (const m of marks) {
+      const my = yAt(m.at);
+      const passed = alt >= m.at;
+      ctx.fillStyle = passed ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.22)';
+      ctx.fillRect(x - 3 * d, my - 0.5 * d, 6 * d, d);
+      ctx.globalAlpha = passed ? 0.85 : 0.4;
+      ctx.fillText(m.icon, x + 5 * d, my);
+      ctx.globalAlpha = 1;
+    }
+    const py = yAt(alt);
+    if (meterPulse > 0.02) {
+      ctx.fillStyle = `rgba(253,230,138,${(meterPulse * 0.45).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(x, py, (4 + meterPulse * 7) * d, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(x, py, 3.2 * d, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawFlys(W, H, camPx) {
+    const d = H / Math.max(1, innerHeight);
+    for (const f of flys) {
+      if (!f.on) continue;
+      const y = f.y0 + (camPx - f.cam0) * f.f;
+      if (f.type === 'shoot') {                            // shooting star
+        const p = f.t / 40, a = (1 - p) * 0.9;
+        const hx = f.x, hy = y + f.t * 2.2 * d;
+        ctx.strokeStyle = `rgba(255,255,255,${a.toFixed(3)})`;
+        ctx.lineWidth = 1.4 * d;
+        ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(hx - 60 * d, hy - 22 * d); ctx.stroke();
+        continue;
+      }
+      let s = spr[f.type];
+      if (Array.isArray(s)) s = f.type === 'birds' ? s[Math.floor(f.t / 9) % 2] : s[f.k % s.length];
+      if (!s) continue;
+      const bob = (f.type === 'balloon' || f.type === 'wballoon') ? Math.sin(f.t * 0.03) * 3 * d : 0;
+      if (f.type === 'plane' || f.type === 'jet') {        // contrail
+        const len = (f.type === 'jet' ? 220 : 120) * d;
+        const tx = f.vx > 0 ? f.x : f.x + s.width, ty = y + s.height * 0.45;
+        for (let k = 0; k < 3; k++) {
+          ctx.fillStyle = `rgba(255,255,255,${(0.16 - k * 0.05).toFixed(3)})`;
+          ctx.fillRect(f.vx > 0 ? tx - len * (k + 1) / 3 : tx + len * k / 3, ty, len / 3, 1.6 * d);
+        }
+      }
+      ctx.save();
+      if (f.vx < 0 && f.type !== 'balloon' && f.type !== 'wballoon') {
+        ctx.translate(Math.round(f.x) + s.width, Math.round(y + bob));
+        ctx.scale(-1, 1);
+        ctx.drawImage(s, 0, 0);
+      } else {
+        ctx.drawImage(s, Math.round(f.x), Math.round(y + bob));
+      }
+      ctx.restore();
+      if ((f.type === 'heli' || f.type === 'plane' || f.type === 'sat') && Math.floor(f.t / 20) % 2 === 0) {
+        ctx.fillStyle = f.type === 'sat' ? 'rgba(255,255,255,0.9)' : 'rgba(255,80,80,0.95)';
+        const lx = f.vx > 0 ? f.x + s.width * 0.55 : f.x + s.width * 0.45;
+        ctx.fillRect(lx, y + s.height * (f.type === 'sat' ? 0.05 : 0.2), 2.2 * d, 2.2 * d);
+      }
+    }
+  }
+
+  function render() {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const W = canvas.width, H = canvas.height;
+
+    // Background: rebuilt into a cache once the camera has been still for two frames
+    const camPx = Math.round(camDown * scale);
+    const sky = skyLevel(alt);
+    const hazeA = (0.15 + 0.7 * smooth(CITY.hazeFrom, CITY.hazeTo, alt)) * (1 - smooth(60, 75, alt));
+    const key = camPx + '|' + Math.round(sky * 100) + '|' + Math.round(hazeA * 100);
+    if (sceneValid && key === sceneKey) {
+      ctx.drawImage(sceneCanvas, 0, 0);
+    } else if (key === lastSceneKey) {
+      paintScene(sceneCtx, camPx, sky, hazeA);
+      sceneKey = key;
+      sceneValid = true;
+      ctx.drawImage(sceneCanvas, 0, 0);
+    } else {
+      paintScene(ctx, camPx, sky, hazeA);
+    }
+    lastSceneKey = key;
+
+    for (const tw of twinkles) {                           // window twinkles / sign flicker
+      const L = cityLayers[tw.li];
+      const y = Math.round(oy + (GROUND - L.lift) * scale + camPx * L.f) - L.lh + tw.y;
+      if (y > H || y < -tw.h) continue;
+      ctx.globalAlpha = 0.45 * (0.5 + 0.5 * Math.sin(time * tw.sp + tw.ph));
+      ctx.fillStyle = tw.c;
+      ctx.fillRect(tw.x, y, tw.w, tw.h);
+    }
+    ctx.globalAlpha = 1;
+
+    const moonT = smooth(80, 92, alt);                     // the moon grows as you climb through space
+    if (moonT > 0.01 && spr.moon) {
+      const r = H * (0.035 + 0.07 * smooth(85, 170, alt));
+      const s = spr.moon, k = r / ((s.width - 4) / 2);
+      ctx.globalAlpha = moonT;
+      ctx.drawImage(s, W * 0.76 - (s.width * k) / 2, H * 0.2 - (s.height * k) / 2, s.width * k, s.height * k);
+      ctx.globalAlpha = 1;
+    }
+
+    const cloudT = smooth(CITY.cloudFrom, CITY.cloudTo, alt) * (1 - smooth(56, 66, alt));
+    if (cloudT > 0.01) {
+      for (const cl of clouds) {
+        const sp = cloudSprites[cl.sp];
+        const cw = sp.width, ch = sp.height;
+        const span = H + ch * 2 + 40;
+        const y = ((cl.y0 + camPx * cl.f) % span) - ch - 20;
+        let x = cl.x + time * cl.v;
+        x = ((x + cw) % (W + cw * 2) + (W + cw * 2)) % (W + cw * 2) - cw;
+        ctx.globalAlpha = cloudT * cl.a;
+        ctx.drawImage(sp, Math.round(x), Math.round(y));
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    drawFlys(W, H, camPx);
+
+    if ((running || paused) && save.settings.meter) drawMeter(W, H);
+
+    // Ambient particles: dust, sand, snow or neon bokeh
+    const amb = ENVS[envId].ambient;
+    const dpx = H / Math.max(1, innerHeight);
+    for (const m of motes) {
+      let xx = m.x * W, yy;
+      if (amb === 'snow') {
+        yy = ((m.y * H + time * 0.5 * m.s * dpx + camDown * scale * 0.2 * m.s) % H + H) % H;
+        xx += Math.sin(time * 0.02 + m.p) * 6 * dpx;
+        ctx.fillStyle = `rgba(255,255,255,${(m.a * 1.6).toFixed(3)})`;
+      } else if (amb === 'sand') {
+        yy = ((m.y * H + camDown * scale * 0.12 * m.s) % H + H) % H;
+        xx = ((m.x * W + time * 0.35 * m.s * dpx) % W + W) % W;
+        ctx.fillStyle = `rgba(255,226,190,${(m.a * 0.9).toFixed(3)})`;
+      } else if (amb === 'bokeh') {
+        yy = ((m.y * H - time * 0.18 * m.s * dpx + camDown * scale * 0.12 * m.s) % H + H) % H;
+        ctx.fillStyle = m.p > 3.14 ? `rgba(236,72,153,${m.a.toFixed(3)})` : `rgba(34,211,238,${m.a.toFixed(3)})`;
+      } else {
+        yy = ((m.y * H + camDown * scale * 0.12 * m.s) % H + H) % H;
+        ctx.fillStyle = `rgba(255,255,255,${(m.a * (0.7 + 0.3 * Math.sin(time * 0.02 + m.p))).toFixed(3)})`;
+      }
+      const sz = m.s * scale * (amb === 'bokeh' ? 1.6 : amb === 'snow' ? 1.2 : 0.9);
+      ctx.fillRect(xx, yy, sz, sz);
+    }
+
+    const sx = shake ? (Math.random() * 2 - 1) * shake : 0;
+    const sy = shake ? (Math.random() * 2 - 1) * shake : 0;
+    ctx.setTransform(scale, 0, 0, scale, ox + sx * scale, oy + (sy + camY) * scale);
+
+    // Ground the tower stands on: spans the whole screen width, scrolls with the world
+    const wl = -(ox + sx * scale) / scale - 2, wr = (W - ox - sx * scale) / scale + 2;
+    const fy = GROUND + camDown - DY - 3;
+    const fb = (H - oy) / scale - (sy + camY) + 4;
+    const ground = ENVS[envId].ground;
+    if (fy < fb) {
+      ctx.save();
+      ctx.translate(0, fy);
+      ctx.fillStyle = floorGrad;
+      ctx.fillRect(wl, 0, wr - wl, fb - fy);
+      ctx.restore();
+      ctx.fillStyle = ground.edge;
+      ctx.fillRect(wl, fy, wr - wl, 1);
+      if (ground.water) {                                  // harbour water: shimmering light lines and a platform
+        for (let k = 0; k < 7; k++) {
+          const ly = fy + 8 + k * 9;
+          if (ly > fb) break;
+          const a = 0.1 + 0.08 * Math.sin(time * 0.05 + k * 1.7);
+          ctx.fillStyle = k % 2 ? `rgba(34,211,238,${a.toFixed(3)})` : `rgba(236,72,153,${a.toFixed(3)})`;
+          const off = Math.sin(time * 0.02 + k) * 20;
+          ctx.fillRect(wl + 30 + off + k * 23 % 60, ly, (wr - wl) * 0.35, 1.2);
+          ctx.fillRect(wl + (wr - wl) * 0.55 - off, ly + 3, (wr - wl) * 0.3, 1.2);
+        }
+        const pw = stack[0].w + 50, px = GW / 2 - pw / 2;
+        ctx.fillStyle = 'rgba(20,8,36,0.95)';
+        ctx.fillRect(px, GROUND + camDown - 2, pw + DX, 10);
+        ctx.fillStyle = 'rgba(236,72,153,0.8)';
+        ctx.fillRect(px, GROUND + camDown - 2, pw + DX, 1.2);
+      } else if (envId === 'desert') {
+        ctx.fillStyle = 'rgba(255,230,190,0.12)';
+        for (let k = 1; k < 5; k++) ctx.fillRect(wl, fy + k * 11 + (k % 2) * 3, wr - wl, 1);
+      }
+    }
+
+    const gy = GROUND + camDown;                            // ground shadow under the base
+    if (gy < GH + 30) {
+      const bw = stack[0].w;
+      const cx = GW / 2 + DX / 2 + 4;
+      ctx.fillStyle = envId === 'snow' ? 'rgba(30,60,100,0.2)' : 'rgba(0,0,0,0.16)';
+      ctx.beginPath();
+      ctx.ellipse(cx + 6, gy - DY / 2 + 3, bw / 2 + 34, 11, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = envId === 'snow' ? 'rgba(30,60,100,0.28)' : 'rgba(0,0,0,0.24)';
+      ctx.beginPath();
+      ctx.ellipse(cx, gy - DY / 2 + 1, bw / 2 + 10, 5 + DY / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    if (mode === 'level' && cfg.t > 0) {                   // target line for the current level
+      const ty = rowY(cfg.t) + BH - 3;
+      if (ty > -10 && ty < GH) {
+        ctx.fillStyle = 'rgba(250,204,21,.6)';
+        for (let x = 0; x < GW + DX; x += 16) ctx.fillRect(x, ty, 9, 2);
+      }
+    }
+
+    // Tower, bottom to top; the block resting on each one casts a soft shadow on its ledge
+    const n = stack.length;
+    for (let i = 0; i < n; i++) {
+      const y = rowY(i);
+      if (y < -BH * 2 || y > GH + DY) continue;
+      drawPlaced(stack[i], y);
+      const above = i + 1 < n ? stack[i + 1] : (running ? { x: mx, w: mw } : null);
+      if (above) castShadow(stack[i], y, above.x, above.w);
+    }
+
+    if (running) {
+      const top = stack[n - 1];
+      const ty = rowY(n - 1);
+      const left = Math.max(mx, top.x);                    // landing zone highlight
+      const right = Math.min(mx + mw, top.x + top.w);
+      if (right > left) {
+        ctx.fillStyle = 'rgba(255,255,255,0.28)';
+        ctx.fillRect(left, ty, right - left, BH);
+      }
+      drawBlock3D(mx, rowY(n), mw, cur.sh, 1, 1, 0, cur.gold);
+    }
+
+    for (const d of debris) {                              // cut-off pieces
+      const a = d.age < 22 ? 1 : Math.max(0, 1 - (d.age - 22) / 38);
+      if (a <= 0) continue;
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.translate(d.x + d.w / 2, d.y + BH / 2 + (camDown - d.cam));
+      ctx.rotate(d.ang);
+      drawBlock3D(-d.w / 2, -BH / 2, d.w, d.sh);
+      ctx.restore();
+    }
+
+    if (mode === 'rising') {                               // lava
+      const ly = GROUND - lava * BH + camDown;
+      const depth = GH + 400 - ly;
+      if (depth > 0) {
+        const wave = x => Math.sin(x * 0.05 + time * 0.08) * 2.2 + Math.sin(x * 0.11 - time * 0.05) * 1.2;
+        const x0 = wl - 10, x1 = wr + 10, steps = 20;
+        ctx.save();
+        ctx.translate(0, ly);
+        ctx.beginPath();
+        ctx.moveTo(x0, depth);
+        for (let i = 0; i <= steps; i++) {
+          const x = x0 + (x1 - x0) * i / steps;
+          ctx.lineTo(x, wave(x));
+        }
+        ctx.lineTo(x1, depth);
+        ctx.closePath();
+        ctx.fillStyle = lavaGrad;
+        ctx.fill();
+        if (lavaFreeze > 0) {
+          ctx.fillStyle = `rgba(120,170,255,${0.32 * Math.min(1, lavaFreeze / 20)})`;
+          ctx.fill();
+        }
+        ctx.beginPath();
+        for (let i = 0; i <= steps; i++) {
+          const x = x0 + (x1 - x0) * i / steps;
+          if (i === 0) ctx.moveTo(x, wave(x)); else ctx.lineTo(x, wave(x));
+        }
+        ctx.strokeStyle = lavaFreeze > 0 ? 'rgba(191,219,254,0.9)' : `rgba(254,215,170,${0.75 + lavaFlash * 0.25})`;
+        ctx.lineWidth = 2 + lavaFlash * 2;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    if (sweep.on) {                                        // height milestone sweep
+      const p = sweep.t / 42;
+      const e = 1 - Math.pow(1 - p, 3);
+      const ly = rowY(sweep.row) - DY;
+      const reach = (wr - wl) * 0.55 * e;
+      const a = (1 - p) * (1 - p);
+      ctx.fillStyle = `rgba(255,255,255,${(a * 0.22).toFixed(3)})`;
+      ctx.fillRect(sweep.x - reach, ly - 1.5, reach * 2, 3);
+      ctx.fillStyle = `rgba(255,255,255,${(a * 0.6).toFixed(3)})`;
+      ctx.fillRect(sweep.x - reach * 0.7, ly - 0.5, reach * 1.4, 1);
+    }
+
+    for (const r of rings) {                               // expanding rings around perfect blocks
+      if (!r.on || r.t < 0) continue;
+      const p = r.t / r.max;
+      const e = 1 - Math.pow(1 - p, 3);
+      const pad = e * r.grow;
+      ctx.globalAlpha = (1 - p) * 0.9;
+      ctx.strokeStyle = r.color;
+      ctx.lineWidth = r.lw * (1 - p * 0.6);
+      ctx.strokeRect(r.x - pad, rowY(r.row) - DY - pad, r.w + DX + pad * 2, BH + DY + pad * 2);
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.globalCompositeOperation = 'lighter';              // brief glow at the placement
+    for (const g of glows) {
+      if (!g.on) continue;
+      const p = g.t / g.max;
+      const a = g.str * (1 - p) * (1 - p);
+      if (a <= 0.01) continue;
+      const gw = g.w + DX + 40, gh = 52 * (1 + p * 0.3);
+      ctx.globalAlpha = a;
+      ctx.drawImage(glowSprite, g.x + (g.w + DX) / 2 - gw / 2, rowY(g.row) + (BH - DY) / 2 - gh / 2, gw, gh);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    let anySpark = false;                                  // particles
+    for (const p of pool) {
+      if (!p.on) continue;
+      if (p.k === 1) { anySpark = true; continue; }
+      const k = p.life / p.max;
+      const s = p.s * (0.4 + 0.6 * k);
+      ctx.globalAlpha = k * k * (3 - 2 * k);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x - s / 2, p.y + (camDown - p.cam) - s / 2, s, s);
+    }
+    if (anySpark) {                                        // sparks, batched into 4 fade levels
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.1;
+      for (let lvl = 0; lvl < 4; lvl++) {
+        ctx.beginPath();
+        let cnt = 0;
+        for (const p of pool) {
+          if (!p.on || p.k !== 1) continue;
+          const k = p.life / p.max;
+          if (Math.min(3, Math.floor(k * 4)) !== lvl) continue;
+          const py = p.y + (camDown - p.cam);
+          ctx.moveTo(p.x, py);
+          ctx.lineTo(p.x - p.vx * 2, py - p.vy * 2);
+          cnt++;
+        }
+        if (cnt) { ctx.globalAlpha = (lvl + 0.5) / 4; ctx.stroke(); }
+      }
+    }
+    ctx.globalAlpha = 1;
+
+    // Near clouds pass in front of the tower, faster than the camera, fading around the moving block
+    const fgT = smooth(28, 34, alt) * (1 - smooth(50, 58, alt));
+    if (fgT > 0.01) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      const blockY = oy + (rowY(stack.length) + BH / 2) * scale;
+      for (const cl of fgClouds) {
+        const sp = fgSprites[cl.sp];
+        const span = H + sp.height * 2;
+        const y = ((cl.y0 + camPx * cl.f) % span) - sp.height;
+        let x = cl.x + time * cl.v;
+        x = ((x + sp.width) % (W + sp.width * 2) + (W + sp.width * 2)) % (W + sp.width * 2) - sp.width;
+        const near = Math.min(1, Math.abs(y + sp.height / 2 - blockY) / (H * 0.14));
+        ctx.globalAlpha = fgT * cl.a * (0.25 + 0.75 * near);
+        ctx.drawImage(sp, Math.round(x), Math.round(y));
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    if (mode === 'rising' && danger > 0) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = Math.min(1, danger * 0.5 + beatPulse * danger * (fxLow ? 0 : 0.2));
+      ctx.drawImage(dangerCanvas, 0, 0);
+      ctx.globalAlpha = 1;
+    }
+    if (flash > 0) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = `rgba(255,255,255,${flash})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  // Loop
+  function frame(now) {
+    const dt = Math.min(3, (now - lastT) / (1000 / 60));
+    lastT = now;
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  pauseBtn.innerHTML = ICON.pause;
+  addEventListener('resize', () => { resize(); if (curScreen() === 'menu') showMenu(); else if (curScreen() === 'skins') paint(); });
+  resize();
+  showMenu();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
